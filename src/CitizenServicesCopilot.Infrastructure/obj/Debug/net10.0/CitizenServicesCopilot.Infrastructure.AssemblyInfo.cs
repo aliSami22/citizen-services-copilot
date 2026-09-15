@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CitizenServicesCopilot.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a59942e9d91e6081c43268191766a17384d9e007")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8b38168523531039cf5948cf8943a9d86ab5746e")]
 [assembly: System.Reflection.AssemblyProductAttribute("CitizenServicesCopilot.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CitizenServicesCopilot.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
