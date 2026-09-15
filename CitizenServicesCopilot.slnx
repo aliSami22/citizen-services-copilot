@@ -5,4 +5,7 @@
     <Project Path="src/CitizenServicesCopilot.Domain/CitizenServicesCopilot.Domain.csproj" />
     <Project Path="src/CitizenServicesCopilot.Infrastructure/CitizenServicesCopilot.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CitizenServicesCopilot.UnitTests/CitizenServicesCopilot.UnitTests.csproj" />
+  </Folder>
 </Solution>
