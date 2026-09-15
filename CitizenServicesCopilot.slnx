@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CitizenServicesCopilot.Api/CitizenServicesCopilot.Api.csproj" />
+    <Project Path="src/CitizenServicesCopilot.Application/CitizenServicesCopilot.Application.csproj" />
+    <Project Path="src/CitizenServicesCopilot.Domain/CitizenServicesCopilot.Domain.csproj" />
+    <Project Path="src/CitizenServicesCopilot.Infrastructure/CitizenServicesCopilot.Infrastructure.csproj" />
+  </Folder>
+</Solution>
