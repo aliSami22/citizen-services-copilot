@@ -22,6 +22,10 @@ public static class DependencyInjection
         services.AddScoped<OrchestratorService>();
         services.AddScoped<HumanReviewService>();
 
+        // Document Ingestion & Chunking (FR-1 baseline)
+        services.AddTransient<Common.Interfaces.Ingestion.IDocumentExtractor, Services.Ingestion.PlainTextExtractor>();
+        services.AddTransient<Common.Interfaces.Ingestion.IDocumentChunker, Services.Ingestion.WordOverlapChunker>();
+
         return services;
     }
 }
