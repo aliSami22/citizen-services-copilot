@@ -1,4 +1,7 @@
+using CitizenServicesCopilot.Api.DTOs;
 using CitizenServicesCopilot.Application;
+using CitizenServicesCopilot.Application.Common.Exceptions;
+using CitizenServicesCopilot.Application.Orchestration;
 using CitizenServicesCopilot.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,28 +23,30 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
+app.MapPost("/api/inquiries", async (
+    SubmitInquiryRequest request,
+    OrchestratorService orchestrator,
+    CancellationToken ct) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    if (string.IsNullOrWhiteSpace(request.UserId) || string.IsNullOrWhiteSpace(request.Question))
+    {
+        return Results.BadRequest(new { message = "UserId and Question are required." });
+    }
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    try
+    {
+        var inquiry = await orchestrator.ProcessInquiryAsync(request.UserId, request.Question, ct);
+        return Results.Ok(InquiryResponse.FromEntity(inquiry));
+    }
+    catch (BudgetExceededException ex)
+    {
+        return Results.Problem(
+            detail: ex.Message,
+            statusCode: StatusCodes.Status402PaymentRequired,
+            title: "Budget Exceeded");
+    }
 })
-.WithName("GetWeatherForecast");
+.WithName("SubmitInquiry");
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CitizenServicesCopilot.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4d9bfa8ad5afb2981bca80849f02cde39251ec9b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a59942e9d91e6081c43268191766a17384d9e007")]
 [assembly: System.Reflection.AssemblyProductAttribute("CitizenServicesCopilot.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CitizenServicesCopilot.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
