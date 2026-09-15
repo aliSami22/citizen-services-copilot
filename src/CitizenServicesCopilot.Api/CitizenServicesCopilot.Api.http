@@ -1,6 +1,12 @@
 @CitizenServicesCopilot.Api_HostAddress = http://localhost:5177
 
-GET {{CitizenServicesCopilot.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+POST {{CitizenServicesCopilot.Api_HostAddress}}/api/inquiries
+Content-Type: application/json
+
+{
+  "userId": "citizen-1",
+  "question": "ما هي الأوراق المطلوبة لتجديد بطاقة الرقم القومي؟"
+}
 
 ###
+
