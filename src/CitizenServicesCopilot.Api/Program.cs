@@ -1,4 +1,10 @@
+using CitizenServicesCopilot.Application;
+using CitizenServicesCopilot.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
