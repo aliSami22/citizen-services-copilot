@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "k1P/90rZXuQ=",
+  "dgSpecHash": "HB4j0TGaOq4=",
   "success": true,
   "projectFilePath": "C:\\Users\\oc\\Desktop\\citizen-services-copilot\\src\\CitizenServicesCopilot.Application\\CitizenServicesCopilot.Application.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\oc\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.1\\microsoft.extensions.dependencyinjection.abstractions.10.0.1.nupkg.sha512"
+  ],
   "logs": []
 }

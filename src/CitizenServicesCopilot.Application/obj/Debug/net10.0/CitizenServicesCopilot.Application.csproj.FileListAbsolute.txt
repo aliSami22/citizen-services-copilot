@@ -1,0 +1,16 @@
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\bin\Debug\net10.0\CitizenServicesCopilot.Application.deps.json
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\bin\Debug\net10.0\CitizenServicesCopilot.Application.dll
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\bin\Debug\net10.0\CitizenServicesCopilot.Application.pdb
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\bin\Debug\net10.0\CitizenServicesCopilot.Domain.dll
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\bin\Debug\net10.0\CitizenServicesCopilot.Domain.pdb
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.csproj.AssemblyReference.cache
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.AssemblyInfoInputs.cache
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.AssemblyInfo.cs
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.csproj.CoreCompileInputs.cache
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.sourcelink.json
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenS.9A326A1C.Up2Date
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.dll
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\refint\CitizenServicesCopilot.Application.dll
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\CitizenServicesCopilot.Application.pdb
+C:\Users\oc\Desktop\citizen-services-copilot\src\CitizenServicesCopilot.Application\obj\Debug\net10.0\ref\CitizenServicesCopilot.Application.dll
