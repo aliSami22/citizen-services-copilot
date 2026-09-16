@@ -36,6 +36,11 @@ public class AppDbContext : DbContext
             b.Property(d => d.Source).IsRequired().HasMaxLength(200);
             b.Property(d => d.Version).HasMaxLength(50);
             b.Property(d => d.Category).HasMaxLength(100);
+            b.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
+            b.Property(d => d.Status).HasConversion<string>().HasMaxLength(50);
+            b.Property(d => d.FailureReason).HasMaxLength(1000);
+
+            b.HasIndex(d => d.ContentHash).IsUnique();
 
             b.HasMany(d => d.Chunks)
              .WithOne(c => c.Document)

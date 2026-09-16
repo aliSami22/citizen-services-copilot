@@ -25,6 +25,7 @@ public static class DependencyInjection
         // Document Ingestion & Chunking (FR-1 baseline)
         services.AddTransient<Common.Interfaces.Ingestion.IDocumentExtractor, Services.Ingestion.PlainTextExtractor>();
         services.AddTransient<Common.Interfaces.Ingestion.IDocumentChunker, Services.Ingestion.WordOverlapChunker>();
+        services.AddScoped<Common.Interfaces.Ingestion.IDocumentIngestionService, Services.Ingestion.DocumentIngestionService>();
 
         return services;
     }

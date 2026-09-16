@@ -16,3 +16,11 @@ public interface IUserBudgetRepository
     Task AddAsync(UserBudget budget, CancellationToken ct = default);
     Task UpdateAsync(UserBudget budget, CancellationToken ct = default);
 }
+
+public interface IDocumentRepository
+{
+    Task<Document?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<Document?> GetByContentHashAsync(string contentHash, CancellationToken ct = default);
+    Task AddAsync(Document document, CancellationToken ct = default);
+    Task UpdateAsync(Document document, CancellationToken ct = default);
+}

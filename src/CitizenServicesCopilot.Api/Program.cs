@@ -45,8 +45,49 @@ app.MapPost("/api/inquiries", async (
             statusCode: StatusCodes.Status402PaymentRequired,
             title: "Budget Exceeded");
     }
+});
+
+app.MapPost("/api/documents/text", async (
+    IngestTextRequest request,
+    CitizenServicesCopilot.Application.Common.Interfaces.Ingestion.IDocumentIngestionService ingestionService,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Title) ||
+        string.IsNullOrWhiteSpace(request.Source) ||
+        string.IsNullOrWhiteSpace(request.Content))
+    {
+        return Results.BadRequest(new { message = "Title, Source, and Content are required fields." });
+    }
+
+    var command = new CitizenServicesCopilot.Application.Common.Models.IngestTextCommand(
+        Title: request.Title.Trim(),
+        Source: request.Source.Trim(),
+        Version: string.IsNullOrWhiteSpace(request.Version) ? "1.0" : request.Version.Trim(),
+        Category: string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
+        Content: request.Content.Trim()
+    );
+
+    var result = await ingestionService.IngestTextAsync(command, ct);
+
+    var response = new DocumentIngestionResponse(
+        DocumentId: result.DocumentId,
+        Status: result.Status.ToString(),
+        ChunkCount: result.ChunkCount,
+        ContentHash: result.ContentHash,
+        IsDuplicate: result.IsDuplicate,
+        FailureReason: result.FailureReason
+    );
+
+    if (result.Status == CitizenServicesCopilot.Domain.Enums.IngestionStatus.Failed)
+    {
+        return Results.UnprocessableEntity(response);
+    }
+
+    return result.IsDuplicate
+        ? Results.Ok(response)
+        : Results.Created($"/api/documents/{result.DocumentId}", response);
 })
-.WithName("SubmitInquiry");
+.WithName("IngestTextDocument");
 
 app.Run();
 
