@@ -5,7 +5,6 @@ using CitizenServicesCopilot.Application.Common.Interfaces.Ingestion;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Enums;
-using Microsoft.Extensions.Logging;
 
 namespace CitizenServicesCopilot.Application.Services.Ingestion;
 
@@ -17,18 +16,15 @@ public class DocumentIngestionService : IDocumentIngestionService
     private readonly IDocumentRepository _documentRepository;
     private readonly IEnumerable<IDocumentExtractor> _extractors;
     private readonly IDocumentChunker _chunker;
-    private readonly ILogger<DocumentIngestionService> _logger;
 
     public DocumentIngestionService(
         IDocumentRepository documentRepository,
         IEnumerable<IDocumentExtractor> extractors,
-        IDocumentChunker chunker,
-        ILogger<DocumentIngestionService> logger)
+        IDocumentChunker chunker)
     {
         _documentRepository = documentRepository ?? throw new ArgumentNullException(nameof(documentRepository));
         _extractors = extractors ?? throw new ArgumentNullException(nameof(extractors));
         _chunker = chunker ?? throw new ArgumentNullException(nameof(chunker));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<IngestionResult> IngestTextAsync(IngestTextCommand command, CancellationToken ct = default)
@@ -59,7 +55,6 @@ public class DocumentIngestionService : IDocumentIngestionService
         var existingDoc = await _documentRepository.GetByContentHashAsync(contentHash, ct);
         if (existingDoc != null)
         {
-            _logger.LogInformation("Document with content hash {Hash} already exists (Id: {DocId}). Returning existing document.", contentHash, existingDoc.Id);
             return new IngestionResult(
                 DocumentId: existingDoc.Id,
                 Status: existingDoc.Status,
@@ -83,7 +78,6 @@ public class DocumentIngestionService : IDocumentIngestionService
         var extractor = _extractors.FirstOrDefault(e => e.CanExtract(input));
         if (extractor == null)
         {
-            _logger.LogError("No registered extractor capable of extracting plain text document.");
             return new IngestionResult(
                 DocumentId: documentId,
                 Status: IngestionStatus.Failed,
@@ -99,9 +93,8 @@ public class DocumentIngestionService : IDocumentIngestionService
         {
             extractedDoc = await extractor.ExtractAsync(input, ct);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Extraction failed for document with hash {Hash}.", contentHash);
             return new IngestionResult(
                 DocumentId: documentId,
                 Status: IngestionStatus.Failed,
@@ -118,9 +111,8 @@ public class DocumentIngestionService : IDocumentIngestionService
         {
             chunks = _chunker.Chunk(documentId, extractedDoc);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Chunking failed for document with hash {Hash}.", contentHash);
             return new IngestionResult(
                 DocumentId: documentId,
                 Status: IngestionStatus.Failed,
@@ -149,7 +141,6 @@ public class DocumentIngestionService : IDocumentIngestionService
         try
         {
             await _documentRepository.AddAsync(document, ct);
-            _logger.LogInformation("Successfully persisted document {DocId} with {ChunkCount} chunks (Hash: {Hash}).", documentId, chunks.Count, contentHash);
 
             return new IngestionResult(
                 DocumentId: documentId,
@@ -159,13 +150,12 @@ public class DocumentIngestionService : IDocumentIngestionService
                 IsDuplicate: false
             );
         }
-        catch (Exception ex)
+        catch
         {
             // Safeguard against concurrent race condition on duplicate ContentHash
             var raceDoc = await _documentRepository.GetByContentHashAsync(contentHash, ct);
             if (raceDoc != null)
             {
-                _logger.LogInformation("Document with hash {Hash} was persisted concurrently. Returning existing entity.", contentHash);
                 return new IngestionResult(
                     DocumentId: raceDoc.Id,
                     Status: raceDoc.Status,
@@ -175,7 +165,6 @@ public class DocumentIngestionService : IDocumentIngestionService
                 );
             }
 
-            _logger.LogError(ex, "Failed to persist document {DocId} to repository.", documentId);
             return new IngestionResult(
                 DocumentId: documentId,
                 Status: IngestionStatus.Failed,
