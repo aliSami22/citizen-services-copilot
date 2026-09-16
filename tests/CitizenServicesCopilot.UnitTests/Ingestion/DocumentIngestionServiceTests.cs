@@ -6,6 +6,7 @@ using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Services.Ingestion;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Enums;
+using CitizenServicesCopilot.UnitTests.Common;
 
 namespace CitizenServicesCopilot.UnitTests.Ingestion;
 
@@ -54,11 +55,15 @@ public class DocumentIngestionServiceTests
     private readonly InMemoryDocumentRepository _repo = new();
     private readonly PlainTextExtractor _plainTextExtractor = new();
     private readonly WordOverlapChunker _chunker = new(chunkSizeInWords: 500, overlapWords: 50);
+    private readonly StubEmbeddingGenerator _stubEmbeddingGenerator = new(dimensions: 1536);
 
-    private DocumentIngestionService CreateService(IEnumerable<IDocumentExtractor>? extractors = null)
+    private DocumentIngestionService CreateService(
+        IEnumerable<IDocumentExtractor>? extractors = null,
+        IEmbeddingGenerator? embeddingGenerator = null)
     {
         var extractorList = extractors ?? new IDocumentExtractor[] { _plainTextExtractor };
-        return new DocumentIngestionService(_repo, extractorList, _chunker);
+        var generator = embeddingGenerator ?? _stubEmbeddingGenerator;
+        return new DocumentIngestionService(_repo, extractorList, _chunker, generator);
     }
 
     [Fact]
@@ -99,7 +104,11 @@ public class DocumentIngestionServiceTests
         Assert.Equal(0, chunk.ChunkIndex);
         Assert.Equal(1, chunk.PageNumber);
         Assert.Equal("Civil Rights", chunk.Section);
-        Assert.Null(chunk.Embedding);
+
+        // Verify vector embedding generation
+        Assert.NotNull(chunk.Embedding);
+        Assert.Equal(1536, chunk.Embedding.Length);
+        Assert.Equal(1, _stubEmbeddingGenerator.BatchCallCount);
     }
 
     [Fact]
@@ -119,7 +128,7 @@ public class DocumentIngestionServiceTests
             Status = IngestionStatus.Completed,
             Chunks = new List<DocumentChunk>
             {
-                new() { Id = Guid.NewGuid(), Content = content, ChunkIndex = 0 }
+                new() { Id = Guid.NewGuid(), Content = content, ChunkIndex = 0, Embedding = new float[1536] }
             }
         };
         await _repo.AddAsync(existingDoc);
@@ -140,8 +149,70 @@ public class DocumentIngestionServiceTests
         Assert.Equal(IngestionStatus.Completed, result.Status);
         Assert.Equal(1, result.ChunkCount);
         Assert.Equal(expectedHash, result.ContentHash);
+
         // Verify no extra AddAsync was called
         Assert.Equal(initialAddCount, _repo.AddCallCount);
+
+        // Verify embedding generator was completely bypassed (0 calls)
+        Assert.Equal(0, _stubEmbeddingGenerator.BatchCallCount);
+        Assert.Equal(0, _stubEmbeddingGenerator.TotalTextsProcessed);
+    }
+
+    [Fact]
+    public async Task IngestTextAsync_EmbeddingGeneratorThrows_ReturnsFailedStatusWithReason()
+    {
+        _stubEmbeddingGenerator.ShouldThrow = true;
+        var service = CreateService();
+        var command = new IngestTextCommand(
+            Title: "Embedding Failure Doc",
+            Source: "test-source",
+            Version: "1.0",
+            Category: "General",
+            Content: "Valid document text whose embedding generation fails."
+        );
+
+        var result = await service.IngestTextAsync(command);
+
+        Assert.Equal(IngestionStatus.Failed, result.Status);
+        Assert.False(result.IsDuplicate);
+        Assert.Equal(0, result.ChunkCount);
+        Assert.NotNull(result.FailureReason);
+        Assert.Contains("Vector embedding generation failed", result.FailureReason);
+
+        // Assert no document was persisted due to failure
+        Assert.Equal(0, _repo.AddCallCount);
+    }
+
+    [Fact]
+    public async Task IngestTextAsync_MultiChunkDocument_PopulatesDistinctEmbeddingsForEveryChunk()
+    {
+        var service = CreateService();
+        var words = string.Join(" ", Enumerable.Range(1, 1200).Select(i => $"word{i}"));
+        var command = new IngestTextCommand(
+            Title: "Large Act",
+            Source: "parliament/large",
+            Version: "1.0",
+            Category: "Legislation",
+            Content: words
+        );
+
+        var result = await service.IngestTextAsync(command);
+
+        Assert.Equal(IngestionStatus.Completed, result.Status);
+        Assert.Equal(3, result.ChunkCount);
+
+        var savedDoc = _repo.Documents.FirstOrDefault(d => d.Id == result.DocumentId);
+        Assert.NotNull(savedDoc);
+        Assert.Equal(3, savedDoc.Chunks.Count);
+
+        foreach (var chunk in savedDoc.Chunks)
+        {
+            Assert.NotNull(chunk.Embedding);
+            Assert.Equal(1536, chunk.Embedding.Length);
+        }
+
+        Assert.Equal(1, _stubEmbeddingGenerator.BatchCallCount);
+        Assert.Equal(3, _stubEmbeddingGenerator.TotalTextsProcessed);
     }
 
     [Theory]
