@@ -1,3 +1,5 @@
+using CitizenServicesCopilot.Domain.Enums;
+
 namespace CitizenServicesCopilot.Application.Common.Models;
 
 /// <summary>
@@ -32,4 +34,27 @@ public record ExtractedSection(
     string Title,
     string Content,
     int PageNumber = 1
+);
+
+/// <summary>
+/// Command to ingest a raw text document.
+/// </summary>
+public record IngestTextCommand(
+    string Title,
+    string Source,
+    string Version,
+    string Category,
+    string Content
+);
+
+/// <summary>
+/// Result of a document ingestion operation.
+/// </summary>
+public record IngestionResult(
+    Guid DocumentId,
+    IngestionStatus Status,
+    int ChunkCount,
+    string ContentHash,
+    bool IsDuplicate,
+    string? FailureReason = null
 );
