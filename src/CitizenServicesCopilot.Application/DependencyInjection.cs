@@ -29,6 +29,7 @@ public static class DependencyInjection
 
         // Retrieval Enhancement (FR-2)
         services.AddSingleton<Common.Interfaces.Retrieval.IQueryEnhancer, Services.Retrieval.QueryEnhancer>();
+        services.AddSingleton<Services.Retrieval.HybridFusionEngine>();
 
         return services;
     }
