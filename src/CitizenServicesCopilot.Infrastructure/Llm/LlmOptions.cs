@@ -16,6 +16,7 @@ public class OpenAiConfig
     public string BaseUrl { get; set; } = "https://api.openai.com/v1";
     public string CheapModel { get; set; } = "gpt-4o-mini";
     public string ExpensiveModel { get; set; } = "gpt-4o";
+    public string EmbeddingModel { get; set; } = "text-embedding-3-small";
 }
 
 public class OllamaConfig
@@ -23,4 +24,5 @@ public class OllamaConfig
     public string BaseUrl { get; set; } = "http://localhost:11434";
     public string CheapModel { get; set; } = "llama3.2:1b";
     public string ExpensiveModel { get; set; } = "llama3.1:8b";
+    public string EmbeddingModel { get; set; } = "nomic-embed-text";
 }

@@ -1,4 +1,5 @@
 using CitizenServicesCopilot.Application.Common.Interfaces;
+using CitizenServicesCopilot.Infrastructure.Embeddings;
 using CitizenServicesCopilot.Infrastructure.Llm;
 using CitizenServicesCopilot.Infrastructure.Persistence;
 using CitizenServicesCopilot.Infrastructure.Persistence.Repositories;
@@ -48,6 +49,13 @@ public static class DependencyInjection
                 var logger = sp.GetRequiredService<ILogger<OpenAiLlmProvider>>();
                 return new OpenAiLlmProvider(clientFactory.CreateClient(), llmOptions.OpenAI, logger);
             });
+
+            services.AddScoped<IEmbeddingGenerator>(sp =>
+            {
+                var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                var logger = sp.GetRequiredService<ILogger<OpenAiEmbeddingGenerator>>();
+                return new OpenAiEmbeddingGenerator(clientFactory.CreateClient(), llmOptions.OpenAI, logger);
+            });
         }
         else
         {
@@ -57,6 +65,13 @@ public static class DependencyInjection
                 var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var logger = sp.GetRequiredService<ILogger<OllamaLlmProvider>>();
                 return new OllamaLlmProvider(clientFactory.CreateClient(), llmOptions.Ollama, logger);
+            });
+
+            services.AddScoped<IEmbeddingGenerator>(sp =>
+            {
+                var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                var logger = sp.GetRequiredService<ILogger<OllamaEmbeddingGenerator>>();
+                return new OllamaEmbeddingGenerator(clientFactory.CreateClient(), llmOptions.Ollama, logger);
             });
         }
 

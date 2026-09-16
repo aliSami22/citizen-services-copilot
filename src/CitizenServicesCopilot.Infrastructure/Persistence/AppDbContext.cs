@@ -65,6 +65,10 @@ public class AppDbContext : DbContext
              .HasColumnType("vector(1536)");
 
             b.HasIndex(c => c.DocumentId);
+
+            b.HasIndex(c => c.Embedding)
+             .HasMethod("hnsw")
+             .HasOperators("vector_cosine_ops");
         });
 
         // 4. UserBudgets

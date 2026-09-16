@@ -9,22 +9,25 @@ using CitizenServicesCopilot.Domain.Enums;
 namespace CitizenServicesCopilot.Application.Services.Ingestion;
 
 /// <summary>
-/// Orchestrates idempotent document ingestion, extraction, chunking, and persistence.
+/// Orchestrates idempotent document ingestion, extraction, chunking, vector embedding, and persistence.
 /// </summary>
 public class DocumentIngestionService : IDocumentIngestionService
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IEnumerable<IDocumentExtractor> _extractors;
     private readonly IDocumentChunker _chunker;
+    private readonly IEmbeddingGenerator _embeddingGenerator;
 
     public DocumentIngestionService(
         IDocumentRepository documentRepository,
         IEnumerable<IDocumentExtractor> extractors,
-        IDocumentChunker chunker)
+        IDocumentChunker chunker,
+        IEmbeddingGenerator embeddingGenerator)
     {
         _documentRepository = documentRepository ?? throw new ArgumentNullException(nameof(documentRepository));
         _extractors = extractors ?? throw new ArgumentNullException(nameof(extractors));
         _chunker = chunker ?? throw new ArgumentNullException(nameof(chunker));
+        _embeddingGenerator = embeddingGenerator ?? throw new ArgumentNullException(nameof(embeddingGenerator));
     }
 
     public async Task<IngestionResult> IngestTextAsync(IngestTextCommand command, CancellationToken ct = default)
@@ -51,7 +54,7 @@ public class DocumentIngestionService : IDocumentIngestionService
         var hashBytes = SHA256.HashData(contentBytes);
         var contentHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
-        // 2. Pre-ingestion idempotency check
+        // 2. Pre-ingestion idempotency check (duplicate bypass: zero chunking or embedding calls)
         var existingDoc = await _documentRepository.GetByContentHashAsync(contentHash, ct);
         if (existingDoc != null)
         {
@@ -123,7 +126,33 @@ public class DocumentIngestionService : IDocumentIngestionService
             );
         }
 
-        // 5. Build domain entity and persist
+        // 5. Generate vector embeddings for chunks
+        if (chunks.Count > 0)
+        {
+            try
+            {
+                var chunkTexts = chunks.Select(c => c.Content).ToList();
+                var embeddings = await _embeddingGenerator.GenerateEmbeddingsBatchAsync(chunkTexts, ct);
+
+                for (int i = 0; i < chunks.Count && i < embeddings.Count; i++)
+                {
+                    chunks[i].Embedding = embeddings[i];
+                }
+            }
+            catch
+            {
+                return new IngestionResult(
+                    DocumentId: documentId,
+                    Status: IngestionStatus.Failed,
+                    ChunkCount: 0,
+                    ContentHash: contentHash,
+                    IsDuplicate: false,
+                    FailureReason: "Vector embedding generation failed during document ingestion."
+                );
+            }
+        }
+
+        // 6. Build domain entity and persist
         var document = new Document
         {
             Id = documentId,
