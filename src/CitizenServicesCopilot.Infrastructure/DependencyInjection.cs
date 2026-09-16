@@ -29,6 +29,7 @@ public static class DependencyInjection
         // 2. Repositories
         services.AddScoped<IInquiryRepository, InquiryRepository>();
         services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
+        services.AddScoped<IDocumentRepository, DocumentRepository>();
 
         // 3. Grounded Retriever
         services.AddScoped<IRetrievalService, GroundedRetriever>();

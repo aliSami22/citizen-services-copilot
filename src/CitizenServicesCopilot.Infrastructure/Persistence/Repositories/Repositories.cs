@@ -71,3 +71,39 @@ public class UserBudgetRepository : IUserBudgetRepository
         await _context.SaveChangesAsync(ct);
     }
 }
+
+public class DocumentRepository : IDocumentRepository
+{
+    private readonly AppDbContext _context;
+
+    public DocumentRepository(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<Document?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await _context.Documents
+            .Include(d => d.Chunks)
+            .FirstOrDefaultAsync(d => d.Id == id, ct);
+    }
+
+    public async Task<Document?> GetByContentHashAsync(string contentHash, CancellationToken ct = default)
+    {
+        return await _context.Documents
+            .Include(d => d.Chunks)
+            .FirstOrDefaultAsync(d => d.ContentHash == contentHash, ct);
+    }
+
+    public async Task AddAsync(Document document, CancellationToken ct = default)
+    {
+        await _context.Documents.AddAsync(document, ct);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(Document document, CancellationToken ct = default)
+    {
+        _context.Documents.Update(document);
+        await _context.SaveChangesAsync(ct);
+    }
+}
