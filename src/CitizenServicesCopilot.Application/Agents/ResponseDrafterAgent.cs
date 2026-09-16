@@ -4,6 +4,7 @@ using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.ValueObjects;
+using Citation = CitizenServicesCopilot.Domain.ValueObjects.Citation;
 
 namespace CitizenServicesCopilot.Application.Agents;
 

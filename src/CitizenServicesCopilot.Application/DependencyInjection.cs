@@ -27,6 +27,10 @@ public static class DependencyInjection
         services.AddTransient<Common.Interfaces.Ingestion.IDocumentChunker, Services.Ingestion.WordOverlapChunker>();
         services.AddScoped<Common.Interfaces.Ingestion.IDocumentIngestionService, Services.Ingestion.DocumentIngestionService>();
 
+        // Retrieval Enhancement (FR-2)
+        services.AddSingleton<Common.Interfaces.Retrieval.IQueryEnhancer, Services.Retrieval.QueryEnhancer>();
+        services.AddSingleton<Services.Retrieval.HybridFusionEngine>();
+
         return services;
     }
 }
