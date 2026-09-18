@@ -13,6 +13,7 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         var setPath = ResolveGoldenSetPath(GetOption(args, "--set"));
+        var outputPath = GetOption(args, "--output") ?? Path.Combine(Directory.GetCurrentDirectory(), "docs", "EVALUATION.md");
         var goldenSet = GoldenSetLoader.Load(setPath);
 
         Console.WriteLine(
@@ -38,23 +39,32 @@ internal static class Program
             NullLogger<GroundedRetriever>.Instance);
 
         var defaults = goldenSet.Defaults;
-        int executed = 0;
+        var runs = new List<(GoldenCase Golden, RetrievalResult Result)>(goldenSet.Cases.Count);
 
         foreach (var goldenCase in goldenSet.Cases)
         {
             var result = await retriever.RetrieveAsync(
                 new RetrievalQuery(goldenCase.Query, defaults.TopK, defaults.MinRelevanceScore));
 
-            executed++;
+            runs.Add((goldenCase, result));
 
             Console.WriteLine(
                 $"[run] {goldenCase.Id,-8} category={goldenCase.AdversarialCategory ?? "standard",-24} " +
                 $"refuse={result.IsRefusal,-5} max={result.MaxScore,6:F4} chunks={result.Chunks.Count,-2} citations={result.Citations.Count}");
         }
 
-        Console.WriteLine($"[harness] executed {executed}/{goldenSet.Cases.Count} cases");
+        var report = MetricsCalculator.Compute(goldenSet, documents, runs);
+        var markdown = ReportGenerator.Render(report);
 
-        return executed == goldenSet.Cases.Count ? 0 : 1;
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? ".");
+        File.WriteAllText(outputPath, markdown);
+
+        Console.WriteLine($"[harness] executed {runs.Count}/{goldenSet.Cases.Count} cases");
+        Console.WriteLine($"[harness] hit-rate {report.HitRate:P1}, groundedness {report.Groundedness:P1}, "
+            + $"refusal accuracy {report.Refusals.Accuracy:P1} (missed refusals {report.Refusals.MissedRefusal})");
+        Console.WriteLine($"[harness] report written to {Path.GetFullPath(outputPath)}");
+
+        return runs.Count == goldenSet.Cases.Count ? 0 : 1;
     }
 
     private static string? GetOption(string[] args, string name)
