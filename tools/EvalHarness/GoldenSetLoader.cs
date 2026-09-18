@@ -31,8 +31,40 @@ public static class GoldenSetLoader
         var set = deserializer.Deserialize<GoldenSet>(File.ReadAllText(path))
             ?? throw new InvalidDataException($"Golden evaluation set is empty: {path}");
 
+        ResolveFixtures(set, path);
         Validate(set);
         return set;
+    }
+
+    private static void ResolveFixtures(GoldenSet set, string goldenSetPath)
+    {
+        var baseDir = Path.GetDirectoryName(Path.GetFullPath(goldenSetPath)) ?? ".";
+        foreach (var document in set.CorpusDocuments)
+        {
+            foreach (var section in document.Sections)
+            {
+                if (string.IsNullOrWhiteSpace(section.FixturePath))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(section.Content))
+                {
+                    throw new InvalidDataException(
+                        $"Section '{section.Title}' (doc '{document.Id}') declares both inline content and fixture_path.");
+                }
+
+                var fixturePath = Path.Combine(baseDir, section.FixturePath);
+                if (!File.Exists(fixturePath))
+                {
+                    throw new FileNotFoundException(
+                        $"Fixture for doc '{document.Id}', section '{section.Title}' not found: {fixturePath}",
+                        fixturePath);
+                }
+
+                section.Content = File.ReadAllText(fixturePath);
+            }
+        }
     }
 
     public static void Validate(GoldenSet set)
