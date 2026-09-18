@@ -41,7 +41,7 @@ _Last updated: 2026-09-18 (as of PR #8; this doc ships as PR #9)_
 | Injection (param. queries, validated upload) | 🟡 | Repos use LINQ/EF (parameterized); text-only ingest validated for required fields | No file-type/mime validation, no upload size limits |
 | Rate limiting / abuse | ❌ | None | No throttling anywhere |
 | Security misconfig (headers, CORS) | ❌ | None | `AllowedHosts: "*"`, no CORS/headers policy |
-| Dependency scanning in CI | 🟡 | Planned for PR #10: `dotnet list package --vulnerable --include-transitive` (CI step) + `.github/dependabot.yml` (nuget + github-actions) | Not yet in CI |
+| Dependency scanning in CI | ✅ | `.github/dependabot.yml` (nuget + github-actions, all PRs merged) + `dotnet list package --vulnerable --include-transitive` gate in `quality-gates` + gitleaks full-history scan (direct CLI v8.24.3; gitleaks-action@v2 replaced) | None |
 | Security logging (no secrets) | 🟡 | Structured `ILogger`; no secrets in code | No security-event audit channel; audit logs not exposed |
 
 ### OWASP LLM Top 10
@@ -52,10 +52,10 @@ _Last updated: 2026-09-18 (as of PR #8; this doc ships as PR #9)_
 | Sensitive disclosure (PII) | 🟡 | No PII in logs (grep-verified calls log excerpts only) | No PII policy; `Inquiry.Question` persists citizen text as-is → PR #14 SECURITY.md |
 | Excessive agency (tool allow-lists) | ⬜ | Agent prompts are fixed LLM roles only | No tool layer exists yet → PR #11 |
 | Unbounded consumption (token caps) | ✅ | `CostGovernorService` pre-flight estimate + `UserBudget.CanAfford` + 402 | Mid-run per-step check missing → PR #12 |
-| Supply chain (pinned deps, lockfiles) | 🟡 | csproj versions pinned; CI `dotnet-version: '10.0.x'` | No `packages.lock.json`; PR #10 adds `dotnet list package --vulnerable --include-transitive` gate + Dependabot |
+| Supply chain (pinned deps, lockfiles) | 🟡 | csproj versions pinned; CI `dotnet-version: '10.0.x'`; `dotnet list package --vulnerable --include-transitive` gate live in CI; Dependabot merged (nuget + github-actions) | No `packages.lock.json`; gitleaks-action@v2 removed (direct CLI scan) |
 
 ### Secrets
-- [ ] `gitleaks detect --source . --log-opts="--all"` clean  → ⬜ not run yet — PR #10 adds it as a CI gate (full-history scan); also run locally pre-submission. Manual review so far: no real keys in code/docs/appsettings (dev-only localhost creds).
+- [x] `gitleaks detect --source . --redact --verbose --exit-code 2` clean  → ✅ runs in CI `quality-gates` on every PR (full-history scan, direct CLI v8.24.3). Verified locally 2026-09-19: 48 commits scanned, no leaks found, exit 0. Manual review: no real keys in code/docs/appsettings (dev-only localhost creds).
 
 ## 4. Engineering Process
 - ≥30 commits across ≥6 distinct days ......... 39 commits, 4 distinct days (2026-09-15 … 09-18) → 6-day floor is a KNOWN UNFIXABLE GAP (see §8)
@@ -65,7 +65,7 @@ _Last updated: 2026-09-18 (as of PR #8; this doc ships as PR #9)_
 - ≥8 PRs with real descriptions + self-review ... ✅ 9 PRs after this doc (#1–#9); descriptions/self-review external to repo — verify on GitHub
 - Issues linked to PRs (`Closes #N`) ........... ⬜ no `Closes #N` in commit messages; issue linking unverifiable from repo
 - Board / milestones showing plan .............. ⬜ no repo evidence (GitHub project board)
-- CI on every PR (build/lint/test/scan) ........ 🟡 `ci.yml` on push+PR currently does build+test only; PR #10 adds lint (`dotnet format --verify-no-changes`), dependency scan (`dotnet list package --vulnerable --include-transitive`), and secret scan (gitleaks, full history) gates
+- CI on every PR (build/lint/test/scan) ........ ✅ `ci.yml` on push+PR runs build + test + `dotnet format --verify-no-changes` (solution + harness) + `dotnet list package --vulnerable --include-transitive` + gitleaks full-history direct CLI scan + offline evaluation harness report
 - Branch protection on main .................... ⬜ no repo evidence — must verify in GitHub settings
 - Release tags ................................. ⬜ zero tags
 - Repo hygiene (README, LICENSE, CONTRIBUTING, templates, CODEOWNERS) 🟡 README only; no LICENSE, CONTRIBUTING, PR/issue templates, CODEOWNERS
