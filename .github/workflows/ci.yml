@@ -58,7 +58,7 @@ jobs:
         run: dotnet list tools/EvalHarness/EvalHarness.csproj package --vulnerable --include-transitive
 
       - name: Secrets scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
