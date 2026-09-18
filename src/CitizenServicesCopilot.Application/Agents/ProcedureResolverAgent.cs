@@ -15,9 +15,9 @@ public class ProcedureResolverAgent
     }
 
     public async Task<(string RequiredDocs, string Steps, string FeesAndTimeline, int TokensUsed)> ResolveProcedureAsync(
-        string question, 
-        IReadOnlyList<DocumentChunk> contextChunks, 
-        string modelName, 
+        string question,
+        IReadOnlyList<DocumentChunk> contextChunks,
+        string modelName,
         CancellationToken ct = default)
     {
         if (contextChunks.Count == 0)

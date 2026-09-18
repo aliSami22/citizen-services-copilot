@@ -15,9 +15,9 @@ public class EligibilityIdentifierAgent
     }
 
     public async Task<(string Summary, int TokensUsed)> IdentifyEligibilityAsync(
-        string question, 
-        IReadOnlyList<DocumentChunk> contextChunks, 
-        string modelName, 
+        string question,
+        IReadOnlyList<DocumentChunk> contextChunks,
+        string modelName,
         CancellationToken ct = default)
     {
         if (contextChunks.Count == 0)

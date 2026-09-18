@@ -28,3 +28,45 @@ jobs:
 
       - name: Run tests
         run: dotnet test --no-build --configuration Release --verbosity normal
+
+  quality-gates:
+    name: Quality Gates & Retrieval Evaluation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore built-in dependencies
+        run: dotnet restore
+
+      - name: Verify formatting (solution)
+        run: dotnet format CitizenServicesCopilot.slnx --verify-no-changes --no-restore
+
+      - name: Verify formatting (eval harness)
+        run: dotnet format tools/EvalHarness/EvalHarness.csproj --verify-no-changes
+
+      - name: Scan for vulnerable packages (solution)
+        run: dotnet list CitizenServicesCopilot.slnx package --vulnerable --include-transitive --no-restore
+
+      - name: Scan for vulnerable packages (eval harness)
+        run: dotnet list tools/EvalHarness/EvalHarness.csproj package --vulnerable --include-transitive
+
+      - name: Secrets scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run offline evaluation harness
+        run: dotnet run --project tools/EvalHarness -- --set tests/eval/golden-set.yaml --output docs/EVALUATION.md
+
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: docs/EVALUATION.md
