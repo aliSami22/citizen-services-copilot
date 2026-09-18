@@ -1,5 +1,5 @@
 # ITI Assessment Checklist — Status Audit
-_Last updated: 2026-09-18 (as of PR #8; this doc ships as PR #9)_
+_Last updated: 2026-09-19 (as of PR #21)_
 
 ## Legend
 ✅ Done (evidence: PR #, file path, test name)
@@ -12,7 +12,7 @@ _Last updated: 2026-09-18 (as of PR #8; this doc ships as PR #9)_
 |----|----------------------|--------|----------|-------------------|
 | FR-1 | Ingestion (2 formats, stages, idempotent, per-doc status) | 🟡 | `PlainTextExtractor`, `WordOverlapChunker`, `DocumentIngestionService` (PR #4/#5); SHA-256 idempotency + status+hash migration; `POST /api/documents/text`; tests `DocumentIngestionServiceTests`, `PlainTextExtractorTests`, `WordOverlapChunkerTests` | Only 1 of 2 formats (plain text). PDF/HTML extractor deferred; `DocumentSourceInput.StreamContent` already models it |
 | FR-2 | Retrieval (hybrid, fusion, enhancement, citations, refusal) | ✅ | PR #7: `GroundedRetriever`, `HybridFusionEngine`, `QueryEnhancer`, `IRetrievalService`; tests `GroundedRetrieverTests`, `HybridFusionEngineTests`, `QueryEnhancerTests` | HNSW index + `vector(1536)` migration present; dense cosine + keyword + RRF + 0.40 refusal gate |
-| FR-3 | Evaluation (≥25 Q/A, ≥5 adversarial, harness, baseline) | ⬜ | — (README lists it under Deferred Work) | PR #10: `golden-set.yaml`, `tools/EvalHarness`, `docs/EVALUATION.md` |
+| FR-3 | Evaluation (≥25 Q/A, ≥5 adversarial, harness, baseline) | ✅ | `tools/EvalHarness` + `tests/eval/golden-set.yaml` (32 cases, 7 adversarial) + `docs/EVALUATION.md` baseline; merged via PR #11 + #21 | Baseline: 16/26 hit-rate, 56.4% groundedness, refusal accuracy 27/32. Root cause of 5/5 missed refusals documented (RRF normalization). Refusal-gate fix deferred to Checkpoint B |
 | FR-4 | Multi-Agent (≥3 + orch, ≥4 tools, ≥1 write gated, typed I/O) | 🟡 | Scaffold only: `EligibilityIdentifierAgent`, `ProcedureResolverAgent`, `ResponseDrafterAgent`, `OrchestratorService` (PR #1/#2) — LLM calls, tuple returns | No tool abstraction, no allow-lists, no gated write tool, no typed I/O records → PR #11 |
 | FR-5 | Orchestration (pattern, breaker, timeout, retry, degradation, trace, approval) | 🟡 | `OrchestratorService` chains cost→retrieval→3 agents→persist; `HumanReviewService` (approve/reject + `AuditLog`) exists | No state machine, breaker, timeout, retry, degradation path, step trace, approval/edit endpoints → PR #11 |
 | FR-6 | Real-time (SSE/WS, progress events, client cancel) | ⬜ | — | Not started → PR #13 |
