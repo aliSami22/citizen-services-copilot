@@ -80,11 +80,11 @@ public class OrchestratorService
 
         // 6. Dispatch to Agent 3: Response Drafter
         var (draft, draftTokens) = await _drafterAgent.DraftResponseAsync(
-            question, 
-            eligibilitySummary, 
-            $"{requiredDocs}\n{steps}\n{feesTimeline}", 
-            relevantChunks, 
-            costEstimate.ModelName, 
+            question,
+            eligibilitySummary,
+            $"{requiredDocs}\n{steps}\n{feesTimeline}",
+            relevantChunks,
+            costEstimate.ModelName,
             ct);
 
         draft.InquiryId = inquiry.Id;

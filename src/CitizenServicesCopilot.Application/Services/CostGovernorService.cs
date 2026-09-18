@@ -75,7 +75,7 @@ public class CostGovernorService : ICostGovernor
 
     public decimal CalculateActualCost(string modelTier, int promptTokens, int completionTokens)
     {
-        bool isExpensive = modelTier.Equals("expensive", StringComparison.OrdinalIgnoreCase) 
+        bool isExpensive = modelTier.Equals("expensive", StringComparison.OrdinalIgnoreCase)
                         || modelTier.Contains("4o", StringComparison.OrdinalIgnoreCase) && !modelTier.Contains("mini", StringComparison.OrdinalIgnoreCase);
 
         decimal inputRate = isExpensive ? ExpensiveInputRatePer1k : CheapInputRatePer1k;

@@ -15,10 +15,10 @@ public class HumanReviewService
     }
 
     public async Task<Inquiry> ApproveInquiryAsync(
-        Guid inquiryId, 
-        string officerId, 
-        string officerName, 
-        string? notes = null, 
+        Guid inquiryId,
+        string officerId,
+        string officerName,
+        string? notes = null,
         CancellationToken ct = default)
     {
         var inquiry = await _inquiryRepository.GetByIdAsync(inquiryId, ct)
@@ -41,10 +41,10 @@ public class HumanReviewService
     }
 
     public async Task<Inquiry> RejectInquiryAsync(
-        Guid inquiryId, 
-        string officerId, 
-        string officerName, 
-        string reason, 
+        Guid inquiryId,
+        string officerId,
+        string officerName,
+        string reason,
         CancellationToken ct = default)
     {
         var inquiry = await _inquiryRepository.GetByIdAsync(inquiryId, ct)

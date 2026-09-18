@@ -14,7 +14,7 @@ namespace CitizenServicesCopilot.Infrastructure;
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         // 1. PostgreSQL with pgvector DbContext
