@@ -32,6 +32,7 @@ public static class ReportGenerator
 
         RenderSummary(sb, report);
         RenderRefusalMatrix(sb, report.Refusals);
+        RenderRefusalRootCause(sb);
         RenderPerCaseTable(sb, report);
         RenderInjectionDiagnostics(sb, report);
         RenderFailures(sb, report);
@@ -72,6 +73,23 @@ public static class ReportGenerator
         sb.AppendLine("| --- | --- | --- |");
         sb.AppendLine($"| Refused | **{r.TrueRefuse}** (true refusal) | {r.FalseRefusal} (false refusal) |");
         sb.AppendLine($"| Answered | {r.MissedRefusal} (missed refusal) | **{r.TrueAccept}** (true accept) |");
+        sb.AppendLine();
+    }
+
+    private static void RenderRefusalRootCause(StringBuilder sb)
+    {
+        sb.AppendLine("## Root Cause: Why the refusal gate misses 5/5 adversarial cases");
+        sb.AppendLine();
+        sb.AppendLine("- HybridFusionEngine uses RRF normalization: rank-1 in either list scores ~0.50.");
+        sb.AppendLine("- The MinRelevanceScore gate of 0.40 therefore fires only when BOTH the dense and "
+            + "keyword candidate lists are empty.");
+        sb.AppendLine("- Any out-of-corpus query still surfaces a rank-1 chunk, which scores >= 0.50 and is "
+            + "returned as an answer instead of a refusal.");
+        sb.AppendLine("- Confirmation: ADV-001..004 all measure max=0.5000 exactly (single-list rank-1); "
+            + "ADV-005 also clears the gate via a keyword hit.");
+        sb.AppendLine("- Mitigation (deferred to Checkpoint B): replace the absolute-score gate with a "
+            + "relative-margin gate (top score vs runner-up delta) AND a per-list floor. This is the change "
+            + "that will move refusal accuracy from 27/32 toward target.");
         sb.AppendLine();
     }
 
@@ -201,12 +219,9 @@ public static class ReportGenerator
     {
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
-        sb.AppendLine("1. **Refusal gate is rank-relative, not score-relative.** GroundedRefusalEngine's fused "
-            + "score is normalized by the theoretical maximum RRF (rank 1 in both lists), so any candidate at "
-            + "rank 1 of either list scores at least ~0.50. With the MinRelevanceScore gate at 0.40, a refusal "
-            + "fires only when both the dense and keyword candidate lists are empty. Out-of-corpus, ambiguous, "
-            + "and injection queries therefore receive top-K chunks instead of a grounded refusal (see the "
-            + "Refusal Matrix rows above).");
+        sb.AppendLine("1. **Refusal gate is rank-relative, not score-relative.** See the Root Cause section above "
+            + "for why this misses all 5 adversarial refusal cases and for the mitigation deferred to "
+            + "Checkpoint B.");
         sb.AppendLine("2. **Dense ranking is offline-stubbed.** The deterministic SHA-256 embedding generator "
             + "produces stable but semantically random vectors; dense ranks are therefore noisy and the "
             + "keyword signal dominates. Replace with a real embedding provider in an online harness to recover "
