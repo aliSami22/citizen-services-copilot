@@ -1,17 +1,26 @@
 using System.Text;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
+using CitizenServicesCopilot.Application.Services.Prompts;
+using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
+using CitizenServicesCopilot.Domain.Workflows;
 
 namespace CitizenServicesCopilot.Application.Agents;
 
-public class EligibilityIdentifierAgent
+public class EligibilityIdentifierAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
+    private readonly IPromptProvider _promptProvider;
 
-    public EligibilityIdentifierAgent(ILLMProvider llmProvider)
+    public AgentRole Role => AgentRole.EligibilityIdentifier;
+
+    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string>();
+
+    public EligibilityIdentifierAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
     {
         _llmProvider = llmProvider;
+        _promptProvider = promptProvider;
     }
 
     public async Task<(string Summary, int TokensUsed)> IdentifyEligibilityAsync(
@@ -53,5 +62,62 @@ public class EligibilityIdentifierAgent
 
         var response = await _llmProvider.GenerateCompletionAsync(prompt, ct);
         return (response.Content.Trim(), response.TotalTokens);
+    }
+
+    public async Task<AgentStep> ExecuteAsync(AgentInput input, CancellationToken ct)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+
+        if (input.ContextChunks.Count == 0)
+        {
+            return new AgentStep(
+                Role,
+                AgentStepStatus.Failed,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                null,
+                null,
+                "No regulatory documentation provided for eligibility analysis.");
+        }
+
+        try
+        {
+            var template = await _promptProvider.GetPromptAsync(PromptKeys.EligibilityIdentifier, ct);
+            var prompt = template
+                .Replace("{context}", PromptContextBuilder.FormatChunks(input.ContextChunks))
+                .Replace("{query}", input.Query);
+
+            var llmPrompt = new LlmPrompt(
+                Messages: new List<LlmMessage>
+                {
+                    new("system", prompt),
+                    new("user", $"Citizen Question: {input.Query}\nProvide the eligibility summary strictly based on the text.")
+                },
+                ModelName: input.ModelName,
+                Temperature: 0.0f,
+                MaxTokens: 400
+            );
+
+            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+
+            var result = new EligibilityResult(response.Content.Trim(), response.TotalTokens);
+
+            return new AgentStep(
+                Role,
+                AgentStepStatus.Succeeded,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                result.TokensUsed,
+                result.Summary,
+                null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new AgentStep(Role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow, null, null, ex.Message);
+        }
     }
 }

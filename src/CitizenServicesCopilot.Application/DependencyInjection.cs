@@ -13,10 +13,14 @@ public static class DependencyInjection
         // Cost Governor Service
         services.AddScoped<ICostGovernor, CostGovernorService>();
 
-        // Specialized Agents
+        // Prompt provider (embedded resources) and specialized agents
+        services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();
         services.AddScoped<ProcedureResolverAgent>();
         services.AddScoped<ResponseDrafterAgent>();
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<EligibilityIdentifierAgent>());
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<ProcedureResolverAgent>());
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<ResponseDrafterAgent>());
 
         // Orchestrator & Human Review
         services.AddScoped<OrchestratorService>();

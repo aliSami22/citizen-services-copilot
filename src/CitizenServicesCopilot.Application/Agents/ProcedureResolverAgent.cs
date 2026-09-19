@@ -1,17 +1,26 @@
 using System.Text;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
+using CitizenServicesCopilot.Application.Services.Prompts;
+using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
+using CitizenServicesCopilot.Domain.Workflows;
 
 namespace CitizenServicesCopilot.Application.Agents;
 
-public class ProcedureResolverAgent
+public class ProcedureResolverAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
+    private readonly IPromptProvider _promptProvider;
 
-    public ProcedureResolverAgent(ILLMProvider llmProvider)
+    public AgentRole Role => AgentRole.ProcedureResolver;
+
+    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string> { "get_regulation_version" };
+
+    public ProcedureResolverAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
     {
         _llmProvider = llmProvider;
+        _promptProvider = promptProvider;
     }
 
     public async Task<(string RequiredDocs, string Steps, string FeesAndTimeline, int TokensUsed)> ResolveProcedureAsync(
@@ -62,5 +71,68 @@ public class ProcedureResolverAgent
             FeesAndTimeline: content,
             TokensUsed: response.TotalTokens
         );
+    }
+
+    public async Task<AgentStep> ExecuteAsync(AgentInput input, CancellationToken ct)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+
+        if (input.ContextChunks.Count == 0)
+        {
+            return new AgentStep(
+                Role,
+                AgentStepStatus.Failed,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                null,
+                null,
+                "No regulatory documentation provided for procedure resolution.");
+        }
+
+        try
+        {
+            var template = await _promptProvider.GetPromptAsync(PromptKeys.ProcedureResolver, ct);
+            var prompt = template
+                .Replace("{context}", PromptContextBuilder.FormatChunks(input.ContextChunks))
+                .Replace("{query}", input.Query);
+
+            var llmPrompt = new LlmPrompt(
+                Messages: new List<LlmMessage>
+                {
+                    new("system", prompt),
+                    new("user", $"Citizen Question: {input.Query}\nFormat your answer clearly with sections: 'Required Documents', 'Step-by-Step Procedure', 'Fees and Timeline'.")
+                },
+                ModelName: input.ModelName,
+                Temperature: 0.0f,
+                MaxTokens: 500
+            );
+
+            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+
+            var plan = new ProcedurePlan(
+                RequiredDocuments: response.Content.Trim(),
+                Steps: response.Content.Trim(),
+                FeesAndTimeline: response.Content.Trim(),
+                TokensUsed: response.TotalTokens);
+
+            var summary = $"{plan.RequiredDocuments}\n{plan.Steps}\n{plan.FeesAndTimeline}".Trim();
+
+            return new AgentStep(
+                Role,
+                AgentStepStatus.Succeeded,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                plan.TokensUsed,
+                summary,
+                null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new AgentStep(Role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow, null, null, ex.Message);
+        }
     }
 }
