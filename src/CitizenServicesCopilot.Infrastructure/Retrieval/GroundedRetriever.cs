@@ -89,6 +89,10 @@ public class GroundedRetriever : IRetrievalService
         double maxScore = fusedCandidates.Max(c => c.CombinedScore);
 
         // 6. Strict Grounded Refusal Evaluation
+        // Root cause closed: RRF normalization makes a rank-1 candidate in either list score
+        // ~0.50, which cleared the legacy 0.40 gate even for out-of-corpus queries. Refusal now
+        // also requires (6a) a per-list raw evidence floor and (6b) rejects isolated single-hit
+        // wins via a relative-margin rule.
         var survivingCandidates = fusedCandidates
             .Where(c => c.CombinedScore >= query.MinRelevanceScore)
             .Take(query.TopK)
@@ -99,6 +103,41 @@ public class GroundedRetriever : IRetrievalService
             _logger.LogInformation(
                 "Retriever: Grounded refusal triggered. Max score {MaxScore:F4} below threshold {Threshold:F4}.",
                 maxScore, query.MinRelevanceScore);
+
+            return RetrievalResult.Refuse(RetrievalResult.DefaultRefusalMessage, maxScore);
+        }
+
+        // 6a. Per-list evidence floor: at least one top-K candidate must carry a raw dense
+        // (>= DenseFloor) or keyword (>= KeywordFloor) score. A fused list composed purely of
+        // rank artifacts scores below both floors and cannot ground an answer.
+        bool hasListEvidence = survivingCandidates.Any(c =>
+            c.DenseScore >= query.DenseFloor || c.KeywordScore >= query.KeywordFloor);
+
+        if (!hasListEvidence)
+        {
+            _logger.LogInformation(
+                "Retriever: Grounded refusal triggered. No top-K candidate carries raw dense (>= {DenseFloor}) or keyword (>= {KeywordFloor}) evidence.",
+                query.DenseFloor, query.KeywordFloor);
+
+            return RetrievalResult.Refuse(RetrievalResult.DefaultRefusalMessage, maxScore);
+        }
+
+        // 6b. Relative-margin guard: a winner that dominates its runner-up yet carries no
+        // per-list evidence of its own is an isolated single-hit win; do not ground on it.
+        var topCandidate = survivingCandidates[0];
+        bool topHasEvidence = topCandidate.DenseScore >= query.DenseFloor
+            || topCandidate.KeywordScore >= query.KeywordFloor;
+        double leadingMargin = survivingCandidates.Count == 1
+            ? 0.0
+            : topCandidate.CombinedScore - survivingCandidates[1].CombinedScore;
+        bool isolatedWin = survivingCandidates.Count == 1
+            || leadingMargin > query.RelativeMarginThreshold;
+
+        if (isolatedWin && !topHasEvidence)
+        {
+            _logger.LogInformation(
+                "Retriever: Grounded refusal triggered. Isolated top result (margin {Margin:F4}) with no per-list evidence.",
+                leadingMargin);
 
             return RetrievalResult.Refuse(RetrievalResult.DefaultRefusalMessage, maxScore);
         }
