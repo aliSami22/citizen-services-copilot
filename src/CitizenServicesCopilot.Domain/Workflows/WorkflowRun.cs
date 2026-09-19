@@ -9,7 +9,8 @@ public sealed record WorkflowRun(
     RunStatus Status,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
-    decimal TotalCostUsd)
+    decimal TotalCostUsd,
+    string? ErrorMessage)
 {
     public static WorkflowRun Create(string userId) => new(
         Id: Guid.NewGuid(),
@@ -17,5 +18,6 @@ public sealed record WorkflowRun(
         Status: RunStatus.NotStarted,
         StartedAtUtc: DateTimeOffset.UtcNow,
         CompletedAtUtc: null,
-        TotalCostUsd: 0m);
+        TotalCostUsd: 0m,
+        ErrorMessage: null);
 }

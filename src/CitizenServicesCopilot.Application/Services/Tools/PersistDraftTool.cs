@@ -14,7 +14,7 @@ namespace CitizenServicesCopilot.Application.Services.Tools;
 /// </summary>
 public sealed class PersistDraftTool : ITool
 {
-    private readonly IApprovalRecordRepository _approvals;
+    private readonly IApprovalService _approvals;
     private readonly IPersistedDraftRepository _drafts;
 
     public string Name => ToolCatalog.PersistDraft;
@@ -29,7 +29,7 @@ public sealed class PersistDraftTool : ITool
             new ToolParameterSpec("draftJson", JsonValueKind.String, IsRequired: true)
         });
 
-    public PersistDraftTool(IApprovalRecordRepository approvals, IPersistedDraftRepository drafts)
+    public PersistDraftTool(IApprovalService approvals, IPersistedDraftRepository drafts)
     {
         _approvals = approvals ?? throw new ArgumentNullException(nameof(approvals));
         _drafts = drafts ?? throw new ArgumentNullException(nameof(drafts));
@@ -54,7 +54,7 @@ public sealed class PersistDraftTool : ITool
 
         var draftJson = draftJsonProp.GetString()!;
 
-        var approval = await _approvals.GetForRunAsync(runId, ct);
+        var approval = await _approvals.GetForRunAsync(runId.ToString(), ct);
         if (approval is null || approval.Decision is not (ApprovalDecision.Approved or ApprovalDecision.EditedAndApproved))
         {
             throw new PersistNotApprovedException(runId);

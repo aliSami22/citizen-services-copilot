@@ -25,6 +25,7 @@ public static class DependencyInjection
         // Orchestrator & Human Review
         services.AddScoped<OrchestratorService>();
         services.AddScoped<HumanReviewService>();
+        services.AddScoped<IApprovalService, ApprovalService>();
 
         // Document Ingestion & Chunking (FR-1 baseline)
         services.AddTransient<Common.Interfaces.Ingestion.IDocumentExtractor, Services.Ingestion.PlainTextExtractor>();

@@ -39,5 +39,11 @@ public sealed class OrchestratorOptions
     /// <summary>
     /// Poll interval while waiting for a human approval record.
     /// </summary>
-    public TimeSpan ApprovalPollingInterval { get; set; } = TimeSpan.FromSeconds(1);
+    public TimeSpan ApprovalPollingInterval { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Hard cap on how long the orchestrator waits for a human approval
+    /// decision; on expiry the run is marked Failed with "approval timeout".
+    /// </summary>
+    public TimeSpan ApprovalWaitTimeout { get; set; } = TimeSpan.FromMinutes(5);
 }

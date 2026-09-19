@@ -26,4 +26,6 @@ public interface IAgentStepRepository
 public interface IApprovalRecordRepository
 {
     Task<ApprovalRecord?> GetForRunAsync(Guid runId, CancellationToken ct = default);
+
+    Task AddAsync(ApprovalRecord record, CancellationToken ct = default);
 }

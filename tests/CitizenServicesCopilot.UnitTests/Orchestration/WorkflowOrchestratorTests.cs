@@ -23,7 +23,7 @@ public class WorkflowOrchestratorTests
     {
         var steps = new InMemorySteps();
         var approvals = new InMemoryApprovals(new ApprovalRecord(
-            ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+            Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
         var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(_ => SuccessRetrieval());
         var runs = new InMemoryRuns();
@@ -62,7 +62,7 @@ public class WorkflowOrchestratorTests
             RetryBaseDelayMs = 1,
             EnableGracefulDegradation = false
         };
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals(null), options: options);
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null), options: options);
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -85,7 +85,7 @@ public class WorkflowOrchestratorTests
             RetryBaseDelayMs = 1,
             EnableGracefulDegradation = false
         };
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals(null), options: options);
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null), options: options);
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -99,7 +99,7 @@ public class WorkflowOrchestratorTests
     {
         var steps = new InMemorySteps();
         var approvals = new InMemoryApprovals(new ApprovalRecord(
-            ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+            Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
         var eligibility = FailingEligibility();
         var procedure = HappyProcedure();
         var drafter = HappyDrafter();
@@ -128,7 +128,7 @@ public class WorkflowOrchestratorTests
         var agents = new IAgent[] { FailingEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(call => call == 1 ? SuccessRetrieval() : RefusalRetrieval());
         var runs = new InMemoryRuns();
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals(null));
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null));
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -141,7 +141,7 @@ public class WorkflowOrchestratorTests
     public async Task Cancellation_DuringStageStopsFurtherExecution()
     {
         var steps = new InMemorySteps();
-        var approvals = new InMemoryApprovals(null);
+        var approvals = new InMemoryApprovals((ApprovalRecord?)null);
         var procedureStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var procedure = new StubAgent
         {
@@ -178,7 +178,7 @@ public class WorkflowOrchestratorTests
     {
         var steps = new InMemorySteps();
         var approvals = new InMemoryApprovals(new ApprovalRecord(
-            ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null));
+            Guid.NewGuid(), ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null));
         var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(_ => SuccessRetrieval());
         var runs = new InMemoryRuns();
@@ -189,6 +189,58 @@ public class WorkflowOrchestratorTests
 
         Assert.Equal(RunStatus.Rejected, run.Status);
         Assert.Equal(0, toolExecutor.CallCount);
+    }
+
+    [Fact]
+    public async Task ApprovalTimeout_ExceedingMaxWait_FailsRunWithTimeoutReason()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var options = new OrchestratorOptions
+        {
+            ApprovalPollingInterval = TimeSpan.FromMilliseconds(20),
+            ApprovalWaitTimeout = TimeSpan.FromMilliseconds(100)
+        };
+        var approvals = new InMemoryApprovals(_ => null);
+        var toolExecutor = new StubToolExecutor(succeed: true);
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, approvals, toolExecutor, options: options);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Contains("approval timeout", run.ErrorMessage);
+        Assert.Equal(0, toolExecutor.CallCount);
+    }
+
+    [Fact]
+    public async Task ApprovalArrivesMidWait_ResolvesAndPersistsEditedContent()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        const string editedDraftJs = "{\"isRefusal\":false,\"refusalReason\":null,\"eligibilitySummary\":\"edited\"," +
+                                     "\"requiredDocuments\":\"passport\",\"procedureSteps\":\"1. apply\"," +
+                                     "\"feesAndTimeline\":\"edited fee note\",\"citations\":[],\"tokensUsed\":10}";
+        var record = new ApprovalRecord(
+            Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", "see edits", editedDraftJs);
+        var approvals = new InMemoryApprovals(call => call == 1 ? null : record);
+        var options = new OrchestratorOptions
+        {
+            ApprovalPollingInterval = TimeSpan.FromMilliseconds(20)
+        };
+        var toolExecutor = new StubToolExecutor(succeed: true);
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, approvals, toolExecutor, options: options);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Approved, run.Status);
+        Assert.Equal(editedDraftJs, toolExecutor.LastDraftJson);
+        Assert.True(approvals.GetCalls > 1);
     }
 
     [Fact]
@@ -208,7 +260,7 @@ public class WorkflowOrchestratorTests
                 new StubRetrieval(_ => SuccessRetrieval()),
                 new InMemoryRuns(),
                 new InMemorySteps(),
-                new InMemoryApprovals(null),
+                new InMemoryApprovals((ApprovalRecord?)null),
                 toolRegistry: registry));
 
         Assert.Contains("search_corpus", ex.Message);
@@ -333,11 +385,18 @@ public class WorkflowOrchestratorTests
 
         public int CallCount { get; private set; }
 
+        public string? LastDraftJson { get; private set; }
+
         public StubToolExecutor(bool succeed) => _succeed = succeed;
 
         public Task<ToolResult> ExecuteAsync(string toolName, JsonElement args, CancellationToken ct = default)
         {
             CallCount++;
+            if (args.TryGetProperty("draftJson", out var draftJson) && draftJson.ValueKind == JsonValueKind.String)
+            {
+                LastDraftJson = draftJson.GetString();
+            }
+
             return Task.FromResult(_succeed
                 ? ToolResult.Succeeded(JsonSerializer.SerializeToElement(new { persisted = true }))
                 : ToolResult.Failed("persist tool boom"));
@@ -395,13 +454,33 @@ public class WorkflowOrchestratorTests
             => Task.FromResult((IReadOnlyList<AgentStep>)All);
     }
 
-    private sealed class InMemoryApprovals : IApprovalRecordRepository
+    private sealed class InMemoryApprovals : IApprovalService
     {
-        private readonly ApprovalRecord? _record;
+        private readonly Func<int, ApprovalRecord?> _script;
 
-        public InMemoryApprovals(ApprovalRecord? record) => _record = record;
+        public int GetCalls { get; private set; }
 
-        public Task<ApprovalRecord?> GetForRunAsync(Guid runId, CancellationToken ct = default)
-            => Task.FromResult(_record);
+        public InMemoryApprovals(ApprovalRecord? record)
+            : this(_ => record)
+        {
+        }
+
+        public InMemoryApprovals(Func<int, ApprovalRecord?> script) => _script = script;
+
+        public Task<ApprovalRecord> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
+            => throw new NotImplementedException();
+
+        public Task<ApprovalRecord> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
+            => throw new NotImplementedException();
+
+        public Task<ApprovalRecord> EditAndApproveAsync(
+            string runId, string approverId, string editedDraftJson, string? reason, CancellationToken ct = default)
+            => throw new NotImplementedException();
+
+        public Task<ApprovalRecord?> GetForRunAsync(string runId, CancellationToken ct = default)
+        {
+            GetCalls++;
+            return Task.FromResult(_script(GetCalls));
+        }
     }
 }

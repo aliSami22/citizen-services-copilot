@@ -28,7 +28,7 @@ public class WorkflowOrchestrator
     private readonly IRetrievalService _retrievalService;
     private readonly IWorkflowRunRepository _runs;
     private readonly IAgentStepRepository _steps;
-    private readonly IApprovalRecordRepository _approvals;
+    private readonly IApprovalService _approvalService;
     private readonly IToolExecutor _toolExecutor;
     private readonly IToolRegistry _toolRegistry;
     private readonly IBudgetPreFlightCheck _budgetCheck;
@@ -42,7 +42,7 @@ public class WorkflowOrchestrator
         IRetrievalService retrievalService,
         IWorkflowRunRepository runs,
         IAgentStepRepository steps,
-        IApprovalRecordRepository approvals,
+        IApprovalService approvalService,
         IToolExecutor toolExecutor,
         IToolRegistry toolRegistry,
         IBudgetPreFlightCheck budgetCheck,
@@ -54,7 +54,7 @@ public class WorkflowOrchestrator
         _retrievalService = retrievalService ?? throw new ArgumentNullException(nameof(retrievalService));
         _runs = runs ?? throw new ArgumentNullException(nameof(runs));
         _steps = steps ?? throw new ArgumentNullException(nameof(steps));
-        _approvals = approvals ?? throw new ArgumentNullException(nameof(approvals));
+        _approvalService = approvalService ?? throw new ArgumentNullException(nameof(approvalService));
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _budgetCheck = budgetCheck ?? throw new ArgumentNullException(nameof(budgetCheck));
@@ -169,18 +169,12 @@ public class WorkflowOrchestrator
         run = run with { Status = RunStatus.WaitingApproval };
         await _runs.UpdateAsync(run, ct);
 
-        ApprovalRecord approval;
-        while (true)
+        // Poll the single source of truth (IApprovalService) until a decision
+        // arrives or the approval wait budget expires.
+        var approval = await WaitForApprovalAsync(run, ct);
+        if (approval is null)
         {
-            ct.ThrowIfCancellationRequested();
-            var record = await _approvals.GetForRunAsync(run.Id, ct);
-            if (record is not null)
-            {
-                approval = record;
-                break;
-            }
-
-            await Task.Delay(_options.ApprovalPollingInterval, ct);
+            return await FailAsync(run, "approval timeout", ct);
         }
 
         if (approval.Decision == ApprovalDecision.Rejected)
@@ -211,6 +205,33 @@ public class WorkflowOrchestrator
         recordedSteps.Add(persistStep);
 
         return await FinishAsync(run, RunStatus.Approved, ct);
+    }
+
+    /// <summary>
+    /// Polls for a human approval decision until one is recorded or the
+    /// <see cref="OrchestratorOptions.ApprovalWaitTimeout"/> budget is consumed.
+    /// Returns null when the wait timed out.
+    /// </summary>
+    private async Task<ApprovalRecord?> WaitForApprovalAsync(WorkflowRun run, CancellationToken ct)
+    {
+        var deadline = DateTimeOffset.UtcNow + _options.ApprovalWaitTimeout;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var record = await _approvalService.GetForRunAsync(run.Id.ToString(), ct);
+            if (record is not null)
+            {
+                return record;
+            }
+
+            if (DateTimeOffset.UtcNow >= deadline)
+            {
+                return null;
+            }
+
+            await Task.Delay(_options.ApprovalPollingInterval, ct);
+        }
     }
 
     /// <summary>
@@ -374,6 +395,7 @@ public class WorkflowOrchestrator
     private async Task<WorkflowRun> FailAsync(WorkflowRun run, string reason, CancellationToken ct)
     {
         _logger.LogWarning("Workflow run {RunId} failed: {Reason}", run.Id, reason);
+        run = run with { ErrorMessage = reason };
         return await FinishAsync(run, RunStatus.Failed, ct);
     }
 
