@@ -145,6 +145,66 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
+## Obtaining an API Key (OpenAI) or Running Locally (Ollama)
+
+Two ways to run the LLM and embedding providers. No API key is needed for the
+local Ollama path.
+
+### Option A — OpenAI free tier (managed)
+
+1. Create an account at <https://platform.openai.com> and sign in.
+2. Open **API keys** → **Create new secret key**, copy the `sk-...` value and
+   store it somewhere safe (you will not be able to see it again).
+3. Configure the app to use the key. Do **not** edit the key into
+   `appsettings.json` (it is committed to git). Use an environment variable:
+
+   ```powershell
+   $env:LlmSettings__Provider = "OpenAI"
+   $env:LlmSettings__OpenAI__ApiKey = "sk-..."
+   ```
+
+   Then start the API with those variables in the same shell:
+   ```powershell
+   dotnet run --project src/CitizenServicesCopilot.Api
+   ```
+
+4. Note: new OpenAI accounts include trial credit; usage is billed to your
+   account when the credit runs out. Budgets are enforced per user by the
+   cost governor (T3 twist) before any LLM call.
+
+### Option B — local Ollama (default, no key)
+
+The default `LlmSettings:Provider` is `Ollama`, so no key is required.
+
+1. Install Ollama from <https://ollama.com>.
+2. Start the server. On Windows/macOS the tray app keeps `ollama serve`
+   running on `http://localhost:11434`. To start it manually:
+
+   ```bash
+   ollama serve
+   ```
+
+3. Pull the models the app reads from `LlmSettings:Ollama`:
+
+   ```bash
+   ollama pull nomic-embed-text
+   ollama pull llama3.2:1b
+   ollama pull llama3.1:8b
+   ```
+
+4. Verify the server is reachable:
+
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+   This should return a JSON list containing the pulled models.
+
+5. Run the API:
+   ```bash
+   dotnet run --project src/CitizenServicesCopilot.Api
+   ```
+
 ## Quick Start
 
 ### 1. Start the database
