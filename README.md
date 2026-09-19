@@ -305,6 +305,18 @@ Test coverage areas:
 - Hybrid fusion engine (RRF scoring, normalization, edge cases)
 - Query enhancer (domain synonym expansion, Arabic + English)
 
+## Troubleshooting
+
+### Local DB schema drift after pulling new migrations
+
+If `POST /api/documents/text` returns 500 with "column does not exist", run:
+
+```bash
+dotnet ef database update \
+  --project src/CitizenServicesCopilot.Infrastructure \
+  --startup-project src/CitizenServicesCopilot.Api
+```
+
 ## 5-Minute Demo Path
 
 > Based **only** on currently working capabilities.
