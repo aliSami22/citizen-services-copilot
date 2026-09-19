@@ -2,6 +2,7 @@ using System.Text.Json;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Orchestration;
+using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
@@ -41,7 +42,7 @@ public class WorkflowOrchestratorTests
             s => Assert.Equal(AgentRole.ResponseDrafter, s.Role),
             s =>
             {
-                Assert.Equal(AgentRole.ResponseDrafter, s.Role);
+                Assert.Equal(AgentRole.Persist, s.Role);
                 Assert.Equal(AgentStepStatus.Succeeded, s.Status);
                 Assert.Contains("persisted", s.OutputSummary);
             });
@@ -190,6 +191,29 @@ public class WorkflowOrchestratorTests
         Assert.Equal(0, toolExecutor.CallCount);
     }
 
+    [Fact]
+    public void Construction_AgentDeclaresUnregisteredTool_Throws()
+    {
+        var agent = new StubAgent
+        {
+            Role = AgentRole.ProcedureResolver,
+            AllowedTools = new HashSet<string> { "search_corpus" },
+            Handler = (_, _) => Completed(SucceededStep(AgentRole.ProcedureResolver, "docs"))
+        };
+        var registry = new ToolRegistry(new ITool[] { new StubPersistWriteTool() });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            BuildOrchestrator(
+                new IAgent[] { agent },
+                new StubRetrieval(_ => SuccessRetrieval()),
+                new InMemoryRuns(),
+                new InMemorySteps(),
+                new InMemoryApprovals(null),
+                toolRegistry: registry));
+
+        Assert.Contains("search_corpus", ex.Message);
+    }
+
     private static WorkflowOrchestrator BuildOrchestrator(
         IReadOnlyList<IAgent> agents,
         IRetrievalService retrieval,
@@ -197,6 +221,7 @@ public class WorkflowOrchestratorTests
         InMemorySteps steps,
         InMemoryApprovals approvals,
         IToolExecutor? toolExecutor = null,
+        IToolRegistry? toolRegistry = null,
         OrchestratorOptions? options = null)
         => new(
             agents,
@@ -205,6 +230,7 @@ public class WorkflowOrchestratorTests
             steps,
             approvals,
             toolExecutor ?? new StubToolExecutor(succeed: true),
+            toolRegistry ?? new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
             new AlwaysOkPreFlight(),
             options ?? new OrchestratorOptions(),
             NullLogger<WorkflowOrchestrator>.Instance);
@@ -273,7 +299,7 @@ public class WorkflowOrchestratorTests
     {
         public required AgentRole Role { get; init; }
 
-        public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string>();
+        public IReadOnlySet<string> AllowedTools { get; init; } = new HashSet<string>();
 
         public required Func<AgentInput, CancellationToken, Task<AgentStep>> Handler { get; init; }
 
@@ -316,6 +342,16 @@ public class WorkflowOrchestratorTests
                 ? ToolResult.Succeeded(JsonSerializer.SerializeToElement(new { persisted = true }))
                 : ToolResult.Failed("persist tool boom"));
         }
+    }
+
+    private sealed class StubPersistWriteTool : ITool
+    {
+        public string Name => WorkflowOrchestrator.PersistDraftToolName;
+
+        public bool IsWrite => true;
+
+        public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken ct = default)
+            => Task.FromResult(ToolResult.Succeeded(JsonSerializer.SerializeToElement(new { persisted = true })));
     }
 
     private sealed class AlwaysOkPreFlight : IBudgetPreFlightCheck

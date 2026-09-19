@@ -35,6 +35,15 @@ public static class DependencyInjection
         services.AddSingleton<Common.Interfaces.Retrieval.IQueryEnhancer, Services.Retrieval.QueryEnhancer>();
         services.AddSingleton<Services.Retrieval.HybridFusionEngine>();
 
+        // Tools (B4): read tools + the write-gated persist tool
+        services.AddScoped<ITool, Services.Tools.SearchCorpusTool>();
+        services.AddScoped<ITool, Services.Tools.GetRegulationVersionTool>();
+        services.AddScoped<ITool, Services.Tools.ComputeFeeTool>();
+        services.AddScoped<ITool, Services.Tools.PersistDraftTool>();
+        services.AddScoped<IToolRegistry, Services.Tools.ToolRegistry>();
+        services.AddSingleton<IToolSchemaValidator>(_ => new Services.Tools.ToolSchemaValidator(Services.Tools.ToolCatalog.Schemas));
+        services.AddScoped<IToolExecutor, Services.Tools.ToolExecutor>();
+
         return services;
     }
 }

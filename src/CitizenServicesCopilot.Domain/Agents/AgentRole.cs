@@ -4,5 +4,6 @@ public enum AgentRole
 {
     EligibilityIdentifier = 0,
     ProcedureResolver,
-    ResponseDrafter
+    ResponseDrafter,
+    Persist
 }

@@ -6,18 +6,17 @@ namespace CitizenServicesCopilot.Application.Services.Tools;
 
 /// <summary>
 /// Validates tool arguments against the registered schema, then dispatches to
-/// the matching <see cref="ITool"/>. Validation happens BEFORE execution so a
-/// malformed call never reaches a tool (B2 requirement).
+/// the matching tool through the <see cref="IToolRegistry"/>. Validation
+/// happens BEFORE execution so a malformed call never reaches a tool (B2).
 /// </summary>
 public sealed class ToolExecutor : IToolExecutor
 {
-    private readonly IReadOnlyDictionary<string, ITool> _tools;
+    private readonly IToolRegistry _registry;
     private readonly IToolSchemaValidator _validator;
 
-    public ToolExecutor(IEnumerable<ITool> tools, IToolSchemaValidator validator)
+    public ToolExecutor(IToolRegistry registry, IToolSchemaValidator validator)
     {
-        _tools = (tools ?? throw new ArgumentNullException(nameof(tools)))
-            .ToDictionary(tool => tool.Name, StringComparer.Ordinal);
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     }
 
@@ -25,7 +24,7 @@ public sealed class ToolExecutor : IToolExecutor
     {
         _validator.Validate(toolName, args);
 
-        if (!_tools.TryGetValue(toolName, out var tool))
+        if (!_registry.TryGet(toolName, out var tool))
         {
             return ToolResult.Failed($"Tool '{toolName}' is not registered.");
         }

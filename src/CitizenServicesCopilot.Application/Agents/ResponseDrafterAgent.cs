@@ -4,6 +4,7 @@ using CitizenServicesCopilot.Application.Common;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Services.Prompts;
+using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.ValueObjects;
@@ -21,7 +22,11 @@ public class ResponseDrafterAgent : IAgent
 
     public AgentRole Role => AgentRole.ResponseDrafter;
 
-    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string> { "search_corpus", "compute_fee" };
+    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string>
+    {
+        ToolCatalog.SearchCorpus,
+        ToolCatalog.ComputeFee
+    };
 
     public ResponseDrafterAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
     {

@@ -2,6 +2,7 @@ using System.Text;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Services.Prompts;
+using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
@@ -15,7 +16,7 @@ public class ProcedureResolverAgent : IAgent
 
     public AgentRole Role => AgentRole.ProcedureResolver;
 
-    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string> { "get_regulation_version" };
+    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string> { ToolCatalog.GetRegulationVersion };
 
     public ProcedureResolverAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
     {

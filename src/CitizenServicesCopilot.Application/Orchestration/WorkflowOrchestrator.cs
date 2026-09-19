@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
+using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
 using Microsoft.Extensions.Logging;
@@ -18,7 +19,7 @@ namespace CitizenServicesCopilot.Application.Orchestration;
 /// </summary>
 public class WorkflowOrchestrator
 {
-    public const string PersistDraftToolName = "persist_draft";
+    public const string PersistDraftToolName = ToolCatalog.PersistDraft;
 
     private const string DegradationNote = "graceful degradation to plain RAG after agent chain failure";
     private const string InsufficientEvidence = "insufficient evidence";
@@ -29,6 +30,7 @@ public class WorkflowOrchestrator
     private readonly IAgentStepRepository _steps;
     private readonly IApprovalRecordRepository _approvals;
     private readonly IToolExecutor _toolExecutor;
+    private readonly IToolRegistry _toolRegistry;
     private readonly IBudgetPreFlightCheck _budgetCheck;
     private readonly OrchestratorOptions _options;
     private readonly ILogger<WorkflowOrchestrator> _logger;
@@ -42,6 +44,7 @@ public class WorkflowOrchestrator
         IAgentStepRepository steps,
         IApprovalRecordRepository approvals,
         IToolExecutor toolExecutor,
+        IToolRegistry toolRegistry,
         IBudgetPreFlightCheck budgetCheck,
         OrchestratorOptions options,
         ILogger<WorkflowOrchestrator> logger)
@@ -53,9 +56,23 @@ public class WorkflowOrchestrator
         _steps = steps ?? throw new ArgumentNullException(nameof(steps));
         _approvals = approvals ?? throw new ArgumentNullException(nameof(approvals));
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
+        _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _budgetCheck = budgetCheck ?? throw new ArgumentNullException(nameof(budgetCheck));
         _options = options ?? new OrchestratorOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // Fail fast: an agent may only declare tools that are actually registered.
+        foreach (var agent in _agents.Values)
+        {
+            foreach (var toolName in agent.AllowedTools)
+            {
+                if (!_toolRegistry.Contains(toolName))
+                {
+                    throw new InvalidOperationException(
+                        $"Agent '{agent.Role}' declares allowed tool '{toolName}' which is not registered.");
+                }
+            }
+        }
     }
 
     public async Task<WorkflowRun> RunAsync(string userId, string query, string modelName, CancellationToken ct = default)
@@ -177,12 +194,12 @@ public class WorkflowOrchestrator
         }
 
         // Approved or EditedAndApproved -> the draft may be persisted.
+        // §3 R-5: an edit-and-approve decision persists the edited draft.
         var draftToPersist = approval.ModifiedDraftJson ?? draftStep.OutputSummary;
         var payload = JsonSerializer.SerializeToElement(new
         {
-            runId = run.Id,
-            draft = draftToPersist,
-            decision = approval.Decision.ToString()
+            runId = run.Id.ToString(),
+            draftJson = draftToPersist
         });
 
         var persistStep = await RunPersistStageAsync(run.Id, payload, ct);
@@ -320,14 +337,34 @@ public class WorkflowOrchestrator
     private async Task<AgentStep> RunPersistStageAsync(Guid runId, JsonElement payload, CancellationToken ct)
     {
         var startedAt = DateTimeOffset.UtcNow;
+
+        // The write-gated persist tool must exist and be flagged as a write.
+        if (!_toolRegistry.TryGet(PersistDraftToolName, out var persistTool))
+        {
+            var missing = new AgentStep(
+                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
+                null, null, $"write tool '{PersistDraftToolName}' is not registered");
+            await _steps.AddAsync(missing, ct);
+            return missing;
+        }
+
+        if (!persistTool.IsWrite)
+        {
+            var notWrite = new AgentStep(
+                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
+                null, null, $"tool '{PersistDraftToolName}' is not flagged as a write tool");
+            await _steps.AddAsync(notWrite, ct);
+            return notWrite;
+        }
+
         var result = await _toolExecutor.ExecuteAsync(PersistDraftToolName, payload, ct);
 
         var step = result.Success
             ? new AgentStep(
-                AgentRole.ResponseDrafter, AgentStepStatus.Succeeded, startedAt, DateTimeOffset.UtcNow,
+                AgentRole.Persist, AgentStepStatus.Succeeded, startedAt, DateTimeOffset.UtcNow,
                 null, "draft persisted after approval", null)
             : new AgentStep(
-                AgentRole.ResponseDrafter, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
+                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
                 null, null, result.Error ?? "persist_draft failed");
 
         await _steps.AddAsync(step, ct);
