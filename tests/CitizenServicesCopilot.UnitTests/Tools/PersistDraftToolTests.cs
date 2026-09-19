@@ -9,7 +9,7 @@ namespace CitizenServicesCopilot.UnitTests.Tools;
 public class PersistDraftToolTests
 {
     [Fact]
-    public async Task NoApprovalRecord_ThrowsPersistNotApproved_AndDoesNotWrite()
+    public async Task NoApprovalAudit_ThrowsPersistNotApproved_AndDoesNotWrite()
     {
         var drafts = new FakeDrafts();
         var tool = new PersistDraftTool(new FakeApprovalService(null), drafts);
@@ -22,10 +22,10 @@ public class PersistDraftToolTests
     }
 
     [Fact]
-    public async Task PendingApprovalRecord_ThrowsPersistNotApproved()
+    public async Task PendingApprovalAudit_ThrowsPersistNotApproved()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(Guid.NewGuid(), ApprovalDecision.Pending, DateTimeOffset.UtcNow, "approver", null, null);
+        var approval = new ApprovalAudit(Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Pending, DateTimeOffset.UtcNow, "approver", null, null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
         var runId = Guid.NewGuid();
 
@@ -36,10 +36,10 @@ public class PersistDraftToolTests
     }
 
     [Fact]
-    public async Task RejectedApprovalRecord_ThrowsPersistNotApproved()
+    public async Task RejectedApprovalAudit_ThrowsPersistNotApproved()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(Guid.NewGuid(), ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null);
+        var approval = new ApprovalAudit(Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
         var runId = Guid.NewGuid();
 
@@ -53,7 +53,7 @@ public class PersistDraftToolTests
     public async Task ApprovedRecord_WritesPayloadAndReturnsSuccess()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
+        var approval = new ApprovalAudit(Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
         var runId = Guid.NewGuid();
 
@@ -70,8 +70,8 @@ public class PersistDraftToolTests
     public async Task EditedAndApproved_WritesEditedContent()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", "edited by reviewer", "edited-draft");
+        var approval = new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", "edited by reviewer", "edited-draft");
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
         var runId = Guid.NewGuid();
 
@@ -86,8 +86,8 @@ public class PersistDraftToolTests
     public async Task EditedAndApproved_WithoutEditedContent_WritesPayloadDraft()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", null, null);
+        var approval = new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", null, null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
         var runId = Guid.NewGuid();
 
@@ -101,7 +101,7 @@ public class PersistDraftToolTests
     public async Task MissingRunId_ReturnsFailedWithoutWrite()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
+        var approval = new ApprovalAudit(Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
 
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { draftJson = "draft" }), CancellationToken.None);
@@ -114,7 +114,7 @@ public class PersistDraftToolTests
     public async Task MissingDraftJson_ReturnsFailedWithoutWrite()
     {
         var drafts = new FakeDrafts();
-        var approval = new ApprovalRecord(Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
+        var approval = new ApprovalAudit(Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null);
         var tool = new PersistDraftTool(new FakeApprovalService(approval), drafts);
 
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { runId = Guid.NewGuid().ToString() }), CancellationToken.None);
@@ -128,21 +128,21 @@ public class PersistDraftToolTests
 
     private sealed class FakeApprovalService : IApprovalService
     {
-        private readonly ApprovalRecord? _record;
+        private readonly ApprovalAudit? _record;
 
-        public FakeApprovalService(ApprovalRecord? record) => _record = record;
+        public FakeApprovalService(ApprovalAudit? record) => _record = record;
 
-        public Task<ApprovalRecord> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
+        public Task<ApprovalAudit> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
+        public Task<ApprovalAudit> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord> EditAndApproveAsync(
+        public Task<ApprovalAudit> EditAndApproveAsync(
             string runId, string approverId, string editedDraftJson, string? reason, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord?> GetForRunAsync(string runId, CancellationToken ct = default)
+        public Task<ApprovalAudit?> GetForRunAsync(string runId, CancellationToken ct = default)
             => Task.FromResult(_record);
     }
 

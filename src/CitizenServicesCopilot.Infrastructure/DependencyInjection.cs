@@ -31,6 +31,10 @@ public static class DependencyInjection
         services.AddScoped<IInquiryRepository, InquiryRepository>();
         services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IWorkflowRunRepository, EfWorkflowRunRepository>();
+        services.AddScoped<IAgentStepRepository, EfAgentStepRepository>();
+        services.AddScoped<IApprovalRecordRepository, EfApprovalRecordRepository>();
+        services.AddScoped<IPersistedDraftRepository, EfPersistedDraftRepository>();
 
         // 3. Grounded Retriever
         services.AddScoped<IRetrievalService, GroundedRetriever>();

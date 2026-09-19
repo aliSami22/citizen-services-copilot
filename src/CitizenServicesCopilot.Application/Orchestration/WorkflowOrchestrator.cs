@@ -36,6 +36,7 @@ public class WorkflowOrchestrator
     private readonly ILogger<WorkflowOrchestrator> _logger;
 
     private int _stageAttemptCount;
+    private int _stepOrder;
 
     public WorkflowOrchestrator(
         IEnumerable<IAgent> agents,
@@ -88,6 +89,7 @@ public class WorkflowOrchestrator
         await _runs.UpdateAsync(run, ct);
 
         _stageAttemptCount = 0;
+        _stepOrder = 0;
         var recordedSteps = new List<AgentStep>();
         var input = new AgentInput(run.Id, userId, query, modelName, Array.Empty<DocumentChunk>(), recordedSteps);
 
@@ -212,7 +214,7 @@ public class WorkflowOrchestrator
     /// <see cref="OrchestratorOptions.ApprovalWaitTimeout"/> budget is consumed.
     /// Returns null when the wait timed out.
     /// </summary>
-    private async Task<ApprovalRecord?> WaitForApprovalAsync(WorkflowRun run, CancellationToken ct)
+    private async Task<ApprovalAudit?> WaitForApprovalAsync(WorkflowRun run, CancellationToken ct)
     {
         var deadline = DateTimeOffset.UtcNow + _options.ApprovalWaitTimeout;
         while (true)
@@ -247,11 +249,9 @@ public class WorkflowOrchestrator
         var degradedStep = new AgentStep(
             Role: failedRole,
             Status: AgentStepStatus.Degraded,
-            StartedAtUtc: DateTimeOffset.UtcNow,
-            CompletedAtUtc: DateTimeOffset.UtcNow,
-            TokensUsed: null,
-            OutputSummary: DegradationNote,
-            ErrorMessage: null);
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            OutputSummary: DegradationNote);
+        degradedStep = PrepareForPersistence(degradedStep, run.Id);
         recordedSteps.Add(degradedStep);
         await _steps.AddAsync(degradedStep, ct);
 
@@ -323,16 +323,25 @@ public class WorkflowOrchestrator
             catch (TimeoutException)
             {
                 lastStep = new AgentStep(
-                    role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
-                    null, null, $"step timed out after {_options.StepTimeout}");
+                    Role: role,
+                    Status: AgentStepStatus.Failed,
+                    CreatedAtUtc: startedAt,
+                    OutputSummary: null,
+                    ErrorMessage: $"step timed out after {_options.StepTimeout}",
+                    DurationMs: (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
             }
             catch (Exception ex)
             {
                 lastStep = new AgentStep(
-                    role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
-                    null, null, ex.Message);
+                    Role: role,
+                    Status: AgentStepStatus.Failed,
+                    CreatedAtUtc: startedAt,
+                    OutputSummary: null,
+                    ErrorMessage: ex.Message,
+                    DurationMs: (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
             }
 
+            lastStep = PrepareForPersistence(lastStep, input.RunId);
             await _steps.AddAsync(lastStep, ct);
 
             if (lastStep.Status == AgentStepStatus.Succeeded)
@@ -362,35 +371,58 @@ public class WorkflowOrchestrator
         // The write-gated persist tool must exist and be flagged as a write.
         if (!_toolRegistry.TryGet(PersistDraftToolName, out var persistTool))
         {
-            var missing = new AgentStep(
-                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
-                null, null, $"write tool '{PersistDraftToolName}' is not registered");
+            var missing = PrepareForPersistence(new AgentStep(
+                Role: AgentRole.Persist,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: startedAt,
+                OutputSummary: null,
+                ErrorMessage: $"write tool '{PersistDraftToolName}' is not registered"), runId);
             await _steps.AddAsync(missing, ct);
             return missing;
         }
 
         if (!persistTool.IsWrite)
         {
-            var notWrite = new AgentStep(
-                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
-                null, null, $"tool '{PersistDraftToolName}' is not flagged as a write tool");
+            var notWrite = PrepareForPersistence(new AgentStep(
+                Role: AgentRole.Persist,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: startedAt,
+                OutputSummary: null,
+                ErrorMessage: $"tool '{PersistDraftToolName}' is not flagged as a write tool"), runId);
             await _steps.AddAsync(notWrite, ct);
             return notWrite;
         }
 
         var result = await _toolExecutor.ExecuteAsync(PersistDraftToolName, payload, ct);
 
-        var step = result.Success
+        var step = PrepareForPersistence(result.Success
             ? new AgentStep(
-                AgentRole.Persist, AgentStepStatus.Succeeded, startedAt, DateTimeOffset.UtcNow,
-                null, "draft persisted after approval", null)
+                Role: AgentRole.Persist,
+                Status: AgentStepStatus.Succeeded,
+                CreatedAtUtc: startedAt,
+                OutputSummary: "draft persisted after approval",
+                ErrorMessage: null)
             : new AgentStep(
-                AgentRole.Persist, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow,
-                null, null, result.Error ?? "persist_draft failed");
+                Role: AgentRole.Persist,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: startedAt,
+                OutputSummary: null,
+                ErrorMessage: result.Error ?? "persist_draft failed"), runId);
 
         await _steps.AddAsync(step, ct);
         return step;
     }
+
+    /// <summary>
+    /// Binds the persistence-framework fields (Id, RunId, Order) onto a step so
+    /// it can be stored. Callers that already assigned these fields are untouched.
+    /// </summary>
+    private AgentStep PrepareForPersistence(AgentStep step, Guid runId) => step with
+    {
+        Id = step.Id == Guid.Empty ? Guid.NewGuid() : step.Id,
+        RunId = runId,
+        Order = _stepOrder++
+    };
 
     private async Task<WorkflowRun> FailAsync(WorkflowRun run, string reason, CancellationToken ct)
     {

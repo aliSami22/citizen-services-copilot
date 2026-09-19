@@ -71,13 +71,11 @@ public class EligibilityIdentifierAgent : IAgent
         if (input.ContextChunks.Count == 0)
         {
             return new AgentStep(
-                Role,
-                AgentStepStatus.Failed,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                null,
-                null,
-                "No regulatory documentation provided for eligibility analysis.");
+                Role: Role,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                OutputSummary: null,
+                ErrorMessage: "No regulatory documentation provided for eligibility analysis.");
         }
 
         try
@@ -103,13 +101,11 @@ public class EligibilityIdentifierAgent : IAgent
             var result = new EligibilityResult(response.Content.Trim(), response.TotalTokens);
 
             return new AgentStep(
-                Role,
-                AgentStepStatus.Succeeded,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                result.TokensUsed,
-                result.Summary,
-                null);
+                Role: Role,
+                Status: AgentStepStatus.Succeeded,
+                CreatedAtUtc: startedAt,
+                OutputSummary: result.Summary,
+                TokensOut: result.TokensUsed);
         }
         catch (OperationCanceledException)
         {
@@ -117,7 +113,7 @@ public class EligibilityIdentifierAgent : IAgent
         }
         catch (Exception ex)
         {
-            return new AgentStep(Role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow, null, null, ex.Message);
+            return new AgentStep(Role: Role, Status: AgentStepStatus.Failed, CreatedAtUtc: DateTimeOffset.UtcNow, ErrorMessage: ex.Message);
         }
     }
 }

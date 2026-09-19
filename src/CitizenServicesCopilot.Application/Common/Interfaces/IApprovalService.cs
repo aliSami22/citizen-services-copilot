@@ -9,12 +9,12 @@ namespace CitizenServicesCopilot.Application.Common.Interfaces;
 /// </summary>
 public interface IApprovalService
 {
-    Task<ApprovalRecord> ApproveAsync(string runId, string approverId, CancellationToken ct = default);
+    Task<ApprovalAudit> ApproveAsync(string runId, string approverId, CancellationToken ct = default);
 
-    Task<ApprovalRecord> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default);
+    Task<ApprovalAudit> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default);
 
-    Task<ApprovalRecord> EditAndApproveAsync(
+    Task<ApprovalAudit> EditAndApproveAsync(
         string runId, string approverId, string editedDraftJson, string? reason, CancellationToken ct = default);
 
-    Task<ApprovalRecord?> GetForRunAsync(string runId, CancellationToken ct = default);
+    Task<ApprovalAudit?> GetForRunAsync(string runId, CancellationToken ct = default);
 }

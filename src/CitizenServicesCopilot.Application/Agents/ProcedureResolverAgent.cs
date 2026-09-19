@@ -81,13 +81,11 @@ public class ProcedureResolverAgent : IAgent
         if (input.ContextChunks.Count == 0)
         {
             return new AgentStep(
-                Role,
-                AgentStepStatus.Failed,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                null,
-                null,
-                "No regulatory documentation provided for procedure resolution.");
+                Role: Role,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                OutputSummary: null,
+                ErrorMessage: "No regulatory documentation provided for procedure resolution.");
         }
 
         try
@@ -119,13 +117,11 @@ public class ProcedureResolverAgent : IAgent
             var summary = $"{plan.RequiredDocuments}\n{plan.Steps}\n{plan.FeesAndTimeline}".Trim();
 
             return new AgentStep(
-                Role,
-                AgentStepStatus.Succeeded,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                plan.TokensUsed,
-                summary,
-                null);
+                Role: Role,
+                Status: AgentStepStatus.Succeeded,
+                CreatedAtUtc: startedAt,
+                OutputSummary: summary,
+                TokensOut: plan.TokensUsed);
         }
         catch (OperationCanceledException)
         {
@@ -133,7 +129,7 @@ public class ProcedureResolverAgent : IAgent
         }
         catch (Exception ex)
         {
-            return new AgentStep(Role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow, null, null, ex.Message);
+            return new AgentStep(Role: Role, Status: AgentStepStatus.Failed, CreatedAtUtc: DateTimeOffset.UtcNow, ErrorMessage: ex.Message);
         }
     }
 }

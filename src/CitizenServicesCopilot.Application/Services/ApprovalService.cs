@@ -19,41 +19,43 @@ public sealed class ApprovalService : IApprovalService
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
-    public async Task<ApprovalRecord> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
+    public async Task<ApprovalAudit> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
     {
         var run = ParseRunId(runId);
         await ThrowIfAlreadyDecidedAsync(run, ct);
 
-        var record = new ApprovalRecord(
+        var audit = new ApprovalAudit(
+            Id: Guid.NewGuid(),
             RunId: run,
             Decision: ApprovalDecision.Approved,
-            DecidedAtUtc: DateTimeOffset.UtcNow,
-            ApprovedBy: approverId,
-            Notes: null,
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ApproverId: approverId,
+            Reason: null,
             ModifiedDraftJson: null);
 
-        await _repository.AddAsync(record, ct);
-        return record;
+        await _repository.AddAsync(audit, ct);
+        return audit;
     }
 
-    public async Task<ApprovalRecord> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
+    public async Task<ApprovalAudit> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
     {
         var run = ParseRunId(runId);
         await ThrowIfAlreadyDecidedAsync(run, ct);
 
-        var record = new ApprovalRecord(
+        var audit = new ApprovalAudit(
+            Id: Guid.NewGuid(),
             RunId: run,
             Decision: ApprovalDecision.Rejected,
-            DecidedAtUtc: DateTimeOffset.UtcNow,
-            ApprovedBy: approverId,
-            Notes: reason,
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ApproverId: approverId,
+            Reason: reason,
             ModifiedDraftJson: null);
 
-        await _repository.AddAsync(record, ct);
-        return record;
+        await _repository.AddAsync(audit, ct);
+        return audit;
     }
 
-    public async Task<ApprovalRecord> EditAndApproveAsync(
+    public async Task<ApprovalAudit> EditAndApproveAsync(
         string runId, string approverId, string editedDraftJson, string? reason, CancellationToken ct = default)
     {
         var run = ParseRunId(runId);
@@ -66,19 +68,20 @@ public sealed class ApprovalService : IApprovalService
 
         DraftJsonShapeValidator.Validate(editedDraftJson);
 
-        var record = new ApprovalRecord(
+        var audit = new ApprovalAudit(
+            Id: Guid.NewGuid(),
             RunId: run,
             Decision: ApprovalDecision.EditedAndApproved,
-            DecidedAtUtc: DateTimeOffset.UtcNow,
-            ApprovedBy: approverId,
-            Notes: reason,
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ApproverId: approverId,
+            Reason: reason,
             ModifiedDraftJson: editedDraftJson);
 
-        await _repository.AddAsync(record, ct);
-        return record;
+        await _repository.AddAsync(audit, ct);
+        return audit;
     }
 
-    public Task<ApprovalRecord?> GetForRunAsync(string runId, CancellationToken ct = default)
+    public Task<ApprovalAudit?> GetForRunAsync(string runId, CancellationToken ct = default)
         => _repository.GetForRunAsync(ParseRunId(runId), ct);
 
     private async Task ThrowIfAlreadyDecidedAsync(Guid runId, CancellationToken ct)

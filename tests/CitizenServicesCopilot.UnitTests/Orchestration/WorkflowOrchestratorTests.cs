@@ -22,8 +22,8 @@ public class WorkflowOrchestratorTests
     public async Task HappyPath_RunsAllStagesInOrder_AndPersistsAfterApproval()
     {
         var steps = new InMemorySteps();
-        var approvals = new InMemoryApprovals(new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
         var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(_ => SuccessRetrieval());
         var runs = new InMemoryRuns();
@@ -62,7 +62,7 @@ public class WorkflowOrchestratorTests
             RetryBaseDelayMs = 1,
             EnableGracefulDegradation = false
         };
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null), options: options);
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null), options: options);
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -85,7 +85,7 @@ public class WorkflowOrchestratorTests
             RetryBaseDelayMs = 1,
             EnableGracefulDegradation = false
         };
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null), options: options);
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null), options: options);
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -98,8 +98,8 @@ public class WorkflowOrchestratorTests
     public async Task AgentChainFailure_DegradesWithRetrievalAndDraftAndDegradedStep()
     {
         var steps = new InMemorySteps();
-        var approvals = new InMemoryApprovals(new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
         var eligibility = FailingEligibility();
         var procedure = HappyProcedure();
         var drafter = HappyDrafter();
@@ -128,7 +128,7 @@ public class WorkflowOrchestratorTests
         var agents = new IAgent[] { FailingEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(call => call == 1 ? SuccessRetrieval() : RefusalRetrieval());
         var runs = new InMemoryRuns();
-        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalRecord?)null));
+        var orchestrator = BuildOrchestrator(agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null));
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
@@ -141,7 +141,7 @@ public class WorkflowOrchestratorTests
     public async Task Cancellation_DuringStageStopsFurtherExecution()
     {
         var steps = new InMemorySteps();
-        var approvals = new InMemoryApprovals((ApprovalRecord?)null);
+        var approvals = new InMemoryApprovals((ApprovalAudit?)null);
         var procedureStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var procedure = new StubAgent
         {
@@ -177,8 +177,8 @@ public class WorkflowOrchestratorTests
     public async Task RejectedApproval_TerminatesRunAndSkipsPersist()
     {
         var steps = new InMemorySteps();
-        var approvals = new InMemoryApprovals(new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null));
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "approver", "denied", null));
         var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
         var retrieval = new StubRetrieval(_ => SuccessRetrieval());
         var runs = new InMemoryRuns();
@@ -225,8 +225,8 @@ public class WorkflowOrchestratorTests
         const string editedDraftJs = "{\"isRefusal\":false,\"refusalReason\":null,\"eligibilitySummary\":\"edited\"," +
                                      "\"requiredDocuments\":\"passport\",\"procedureSteps\":\"1. apply\"," +
                                      "\"feesAndTimeline\":\"edited fee note\",\"citations\":[],\"tokensUsed\":10}";
-        var record = new ApprovalRecord(
-            Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", "see edits", editedDraftJs);
+        var record = new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.EditedAndApproved, DateTimeOffset.UtcNow, "approver", "see edits", editedDraftJs);
         var approvals = new InMemoryApprovals(call => call == 1 ? null : record);
         var options = new OrchestratorOptions
         {
@@ -260,7 +260,7 @@ public class WorkflowOrchestratorTests
                 new StubRetrieval(_ => SuccessRetrieval()),
                 new InMemoryRuns(),
                 new InMemorySteps(),
-                new InMemoryApprovals((ApprovalRecord?)null),
+                new InMemoryApprovals((ApprovalAudit?)null),
                 toolRegistry: registry));
 
         Assert.Contains("search_corpus", ex.Message);
@@ -288,10 +288,10 @@ public class WorkflowOrchestratorTests
             NullLogger<WorkflowOrchestrator>.Instance);
 
     private static AgentStep SucceededStep(AgentRole role, string output)
-        => new(role, AgentStepStatus.Succeeded, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 5, output, null);
+        => new(Role: role, Status: AgentStepStatus.Succeeded, CreatedAtUtc: DateTimeOffset.UtcNow, OutputSummary: output, TokensOut: 5);
 
     private static AgentStep FailedStep(AgentRole role, string error)
-        => new(role, AgentStepStatus.Failed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null, error);
+        => new(Role: role, Status: AgentStepStatus.Failed, CreatedAtUtc: DateTimeOffset.UtcNow, ErrorMessage: error);
 
     private static Task<AgentStep> Completed(AgentStep step) => Task.FromResult(step);
 
@@ -456,28 +456,28 @@ public class WorkflowOrchestratorTests
 
     private sealed class InMemoryApprovals : IApprovalService
     {
-        private readonly Func<int, ApprovalRecord?> _script;
+        private readonly Func<int, ApprovalAudit?> _script;
 
         public int GetCalls { get; private set; }
 
-        public InMemoryApprovals(ApprovalRecord? record)
+        public InMemoryApprovals(ApprovalAudit? record)
             : this(_ => record)
         {
         }
 
-        public InMemoryApprovals(Func<int, ApprovalRecord?> script) => _script = script;
+        public InMemoryApprovals(Func<int, ApprovalAudit?> script) => _script = script;
 
-        public Task<ApprovalRecord> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
+        public Task<ApprovalAudit> ApproveAsync(string runId, string approverId, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
+        public Task<ApprovalAudit> RejectAsync(string runId, string approverId, string reason, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord> EditAndApproveAsync(
+        public Task<ApprovalAudit> EditAndApproveAsync(
             string runId, string approverId, string editedDraftJson, string? reason, CancellationToken ct = default)
             => throw new NotImplementedException();
 
-        public Task<ApprovalRecord?> GetForRunAsync(string runId, CancellationToken ct = default)
+        public Task<ApprovalAudit?> GetForRunAsync(string runId, CancellationToken ct = default)
         {
             GetCalls++;
             return Task.FromResult(_script(GetCalls));

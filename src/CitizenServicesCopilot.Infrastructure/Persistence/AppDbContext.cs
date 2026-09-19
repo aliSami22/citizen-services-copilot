@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.ValueObjects;
+using CitizenServicesCopilot.Domain.Workflows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pgvector;
@@ -20,6 +21,10 @@ public class AppDbContext : DbContext
     public DbSet<Inquiry> Inquiries => Set<Inquiry>();
     public DbSet<InquiryDraft> InquiryDrafts => Set<InquiryDraft>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<WorkflowRun> WorkflowRuns => Set<WorkflowRun>();
+    public DbSet<AgentStep> AgentSteps => Set<AgentStep>();
+    public DbSet<ApprovalAudit> ApprovalAudits => Set<ApprovalAudit>();
+    public DbSet<PersistedDraft> PersistedDrafts => Set<PersistedDraft>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +128,56 @@ public class AppDbContext : DbContext
             b.Property(a => a.OfficerId).IsRequired().HasMaxLength(100);
             b.Property(a => a.OfficerName).IsRequired().HasMaxLength(200);
             b.Property(a => a.Notes).HasMaxLength(1000);
+        });
+
+        // 8. Multi-agent workflow (B6): runs, steps, approval audit, persisted drafts
+        modelBuilder.Entity<WorkflowRun>(b =>
+        {
+            b.HasKey(r => r.Id);
+            b.Property(r => r.UserId).IsRequired().HasMaxLength(100);
+            b.Property(r => r.Status).HasConversion<string>().HasMaxLength(50);
+            b.Property(r => r.TotalCostUsd).HasPrecision(18, 6);
+        });
+
+        modelBuilder.Entity<AgentStep>(b =>
+        {
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Role).HasConversion<string>().HasMaxLength(50);
+            b.Property(s => s.Status).HasConversion<string>().HasMaxLength(50);
+            b.Property(s => s.ToolName).HasMaxLength(100);
+            b.Property(s => s.InputSummary).HasColumnType("text");
+            b.Property(s => s.OutputSummary).HasColumnType("text");
+            b.Property(s => s.CostUsd).HasPrecision(18, 6);
+            b.HasOne<WorkflowRun>()
+                .WithMany()
+                .HasForeignKey(s => s.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(s => new { s.RunId, s.Order });
+        });
+
+        modelBuilder.Entity<ApprovalAudit>(b =>
+        {
+            b.HasKey(a => a.Id);
+            b.Property(a => a.Decision).HasConversion<string>().HasMaxLength(50);
+            b.Property(a => a.ApproverId).HasMaxLength(100);
+            b.Property(a => a.Reason).HasColumnType("text");
+            b.Property(a => a.ModifiedDraftJson).HasColumnType("text");
+            b.HasOne<WorkflowRun>()
+                .WithMany()
+                .HasForeignKey(a => a.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(a => new { a.RunId, a.CreatedAtUtc }).IsDescending(false, true);
+        });
+
+        modelBuilder.Entity<PersistedDraft>(b =>
+        {
+            b.HasKey(d => d.Id);
+            b.Property(d => d.DraftJson).HasColumnType("text");
+            b.HasOne<WorkflowRun>()
+                .WithMany()
+                .HasForeignKey(d => d.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(d => d.RunId);
         });
     }
 }

@@ -114,13 +114,11 @@ public class ResponseDrafterAgent : IAgent
         if (input.ContextChunks.Count == 0)
         {
             return new AgentStep(
-                Role,
-                AgentStepStatus.Failed,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                null,
-                null,
-                "No evidence to draft a grounded response.");
+                Role: Role,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                OutputSummary: null,
+                ErrorMessage: "No evidence to draft a grounded response.");
         }
 
         try
@@ -158,13 +156,11 @@ public class ResponseDrafterAgent : IAgent
             var draftJson = JsonSerializer.Serialize(draft, JsonOptions.CamelCase);
 
             return new AgentStep(
-                Role,
-                AgentStepStatus.Succeeded,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                draft.TokensUsed,
-                draftJson,
-                null);
+                Role: Role,
+                Status: AgentStepStatus.Succeeded,
+                CreatedAtUtc: startedAt,
+                OutputSummary: draftJson,
+                TokensOut: draft.TokensUsed);
         }
         catch (OperationCanceledException)
         {
@@ -172,7 +168,7 @@ public class ResponseDrafterAgent : IAgent
         }
         catch (Exception ex)
         {
-            return new AgentStep(Role, AgentStepStatus.Failed, startedAt, DateTimeOffset.UtcNow, null, null, ex.Message);
+            return new AgentStep(Role: Role, Status: AgentStepStatus.Failed, CreatedAtUtc: DateTimeOffset.UtcNow, ErrorMessage: ex.Message);
         }
     }
 

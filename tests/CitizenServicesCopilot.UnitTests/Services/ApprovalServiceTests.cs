@@ -23,8 +23,8 @@ public class ApprovalServiceTests
 
         Assert.Equal(ApprovalDecision.Approved, record.Decision);
         Assert.Equal(runId, record.RunId);
-        Assert.Equal("officer-1", record.ApprovedBy);
-        Assert.Null(record.Notes);
+        Assert.Equal("officer-1", record.ApproverId);
+        Assert.Null(record.Reason);
         Assert.Null(record.ModifiedDraftJson);
         Assert.Single(repo.All);
         Assert.Equal(runId, repo.All[0].RunId);
@@ -35,7 +35,7 @@ public class ApprovalServiceTests
     {
         var runId = Guid.NewGuid();
         var repo = new InMemoryApprovalRepository(
-            new ApprovalRecord(runId, ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "officer-1", "denied", null));
+            new ApprovalAudit(Guid.NewGuid(), runId, ApprovalDecision.Rejected, DateTimeOffset.UtcNow, "officer-1", "denied", null));
         var service = new ApprovalService(repo);
 
         var ex = await Assert.ThrowsAsync<ApprovalAlreadyDecidedException>(
@@ -67,7 +67,7 @@ public class ApprovalServiceTests
         var record = await service.RejectAsync(runId.ToString(), "officer-1", "missing residency evidence", CancellationToken.None);
 
         Assert.Equal(ApprovalDecision.Rejected, record.Decision);
-        Assert.Equal("missing residency evidence", record.Notes);
+        Assert.Equal("missing residency evidence", record.Reason);
         Assert.Single(repo.All);
     }
 
@@ -83,7 +83,7 @@ public class ApprovalServiceTests
 
         Assert.Equal(ApprovalDecision.EditedAndApproved, record.Decision);
         Assert.Equal(ValidDraftJson, record.ModifiedDraftJson);
-        Assert.Equal("updated fee note", record.Notes);
+        Assert.Equal("updated fee note", record.Reason);
         Assert.Single(repo.All);
         Assert.Equal(ValidDraftJson, repo.All[0].ModifiedDraftJson);
     }
@@ -150,20 +150,20 @@ public class ApprovalServiceTests
 
     private sealed class InMemoryApprovalRepository : IApprovalRecordRepository
     {
-        private readonly Dictionary<Guid, ApprovalRecord> _store = new();
+        private readonly Dictionary<Guid, ApprovalAudit> _store = new();
 
-        public IReadOnlyList<ApprovalRecord> All => _store.Values.ToList();
+        public IReadOnlyList<ApprovalAudit> All => _store.Values.ToList();
 
         public InMemoryApprovalRepository()
         {
         }
 
-        public InMemoryApprovalRepository(ApprovalRecord seed) => _store[seed.RunId] = seed;
+        public InMemoryApprovalRepository(ApprovalAudit seed) => _store[seed.RunId] = seed;
 
-        public Task<ApprovalRecord?> GetForRunAsync(Guid runId, CancellationToken ct = default)
+        public Task<ApprovalAudit?> GetForRunAsync(Guid runId, CancellationToken ct = default)
             => Task.FromResult(_store.TryGetValue(runId, out var record) ? record : null);
 
-        public Task AddAsync(ApprovalRecord record, CancellationToken ct = default)
+        public Task AddAsync(ApprovalAudit record, CancellationToken ct = default)
         {
             _store[record.RunId] = record;
             return Task.CompletedTask;
