@@ -426,6 +426,16 @@ Alternative — change the port in
 `src/CitizenServicesCopilot.Api/Properties/launchSettings.json`
 (`http` profile → `applicationUrl`), then re-run.
 
+## Seeded Demo Accounts
+
+> Added in **Checkpoint D** (authentication & authorization).
+
+No demo accounts are seeded in the current codebase. The app has no
+authentication or authorization on any endpoint yet (see Current Limitations);
+user identity is passed in the request body (`userId` on
+`POST /api/inquiries`). Demo credentials, roles (`Citizen`, `Officer`), and
+budget seeding will be documented here when auth lands in Checkpoint D.
+
 ## 5-Minute Demo Path
 
 > Based **only** on currently working capabilities.
