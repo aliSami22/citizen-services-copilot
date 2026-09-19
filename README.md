@@ -388,6 +388,44 @@ dotnet ef database update \
   --startup-project src/CitizenServicesCopilot.Api
 ```
 
+### Ollama not reachable -> 422 on POST /api/documents/text
+
+Symptom: `POST /api/documents/text` returns `422` with
+`"failureReason": "Vector embedding generation failed during document
+ingestion."`
+
+Cause: the default `LlmSettings:Provider` is `Ollama`, and the embedding
+generator (default model `nomic-embed-text`) cannot reach the server at
+`LlmSettings:Ollama:BaseUrl` (`http://localhost:11434`).
+
+Fix:
+```bash
+ollama serve
+ollama pull nomic-embed-text
+```
+
+Or switch to OpenAI and supply a key (see "Obtaining an API Key" above);
+embedding generation will use `LlmSettings:OpenAI:EmbeddingModel`.
+
+### Port 5177 already in use
+
+Symptom: `dotnet run` fails to start because `http://localhost:5177` is
+already bound (e.g. a previous API instance is still running).
+
+Fix — kill the process holding the port (Windows):
+```powershell
+netstat -ano | findstr :5177
+taskkill /PID <pid> /F
+```
+Linux/macOS:
+```bash
+lsof -ti:5177 | xargs kill
+```
+
+Alternative — change the port in
+`src/CitizenServicesCopilot.Api/Properties/launchSettings.json`
+(`http` profile → `applicationUrl`), then re-run.
+
 ## 5-Minute Demo Path
 
 > Based **only** on currently working capabilities.
