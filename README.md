@@ -200,21 +200,32 @@ curl -X POST http://localhost:5177/api/inquiries \
 
 ## Environment Variables / Configuration
 
-All configuration is in `appsettings.json` / `appsettings.Development.json`:
+All settings are read from `appsettings.json` / `appsettings.Development.json`.
+Every key below can also be supplied as an environment variable using the
+ASP.NET Core convention (hierarchy separator `:` becomes `__`), which
+overrides the JSON value.
 
-| Key | Default | Description |
-|---|---|---|
-| `ConnectionStrings:DefaultConnection` | `Host=localhost;Port=5432;Database=citizenservices;Username=postgres;Password=postgrespassword` | PostgreSQL connection string |
-| `LlmSettings:Provider` | `Ollama` | Active LLM/embedding provider. Set to `OpenAI` or `Ollama` |
-| `LlmSettings:OpenAI:ApiKey` | *(empty)* | OpenAI API key. **Required** if Provider is `OpenAI` |
-| `LlmSettings:OpenAI:BaseUrl` | `https://api.openai.com/v1` | OpenAI API base URL |
-| `LlmSettings:OpenAI:CheapModel` | `gpt-4o-mini` | Model for simple queries (OpenAI) |
-| `LlmSettings:OpenAI:ExpensiveModel` | `gpt-4o` | Model for complex queries (OpenAI) |
-| `LlmSettings:OpenAI:EmbeddingModel` | `text-embedding-3-small` | Embedding model (OpenAI) |
-| `LlmSettings:Ollama:BaseUrl` | `http://localhost:11434` | Ollama server URL |
-| `LlmSettings:Ollama:CheapModel` | `llama3.2:1b` | Model for simple queries (Ollama) |
-| `LlmSettings:Ollama:ExpensiveModel` | `llama3.1:8b` | Model for complex queries (Ollama) |
-| `LlmSettings:Ollama:EmbeddingModel` | `nomic-embed-text` | Embedding model (Ollama) |
+| Configuration key | Environment variable | Default | Description |
+|---|---|---|---|
+| `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` | `Host=localhost;Port=5432;Database=citizenservices;Username=postgres;Password=postgrespassword` | PostgreSQL (pgvector) connection string |
+| `LlmSettings:Provider` | `LlmSettings__Provider` | `Ollama` | Active LLM/embedding provider. `OpenAI` or `Ollama` |
+| `LlmSettings:OpenAI:ApiKey` | `LlmSettings__OpenAI__ApiKey` | *(empty)* | OpenAI API key. **Required** when Provider is `OpenAI` |
+| `LlmSettings:OpenAI:BaseUrl` | `LlmSettings__OpenAI__BaseUrl` | `https://api.openai.com/v1` | OpenAI API base URL |
+| `LlmSettings:OpenAI:CheapModel` | `LlmSettings__OpenAI__CheapModel` | `gpt-4o-mini` | Model for simple queries (OpenAI) |
+| `LlmSettings:OpenAI:ExpensiveModel` | `LlmSettings__OpenAI__ExpensiveModel` | `gpt-4o` | Model for complex queries (OpenAI) |
+| `LlmSettings:OpenAI:EmbeddingModel` | `LlmSettings__OpenAI__EmbeddingModel` | `text-embedding-3-small` | Embedding model (OpenAI) |
+| `LlmSettings:Ollama:BaseUrl` | `LlmSettings__Ollama__BaseUrl` | `http://localhost:11434` | Ollama server URL |
+| `LlmSettings:Ollama:CheapModel` | `LlmSettings__Ollama__CheapModel` | `llama3.2:1b` | Model for simple queries (Ollama) |
+| `LlmSettings:Ollama:ExpensiveModel` | `LlmSettings__Ollama__ExpensiveModel` | `llama3.1:8b` | Model for complex queries (Ollama) |
+| `LlmSettings:Ollama:EmbeddingModel` | `LlmSettings__Ollama__EmbeddingModel` | `nomic-embed-text` | Embedding model (Ollama) |
+| `Logging:LogLevel:*` | `Logging__LogLevel__*` | `Information` (`Debug` in Development) | ASP.NET Core log levels |
+| `AllowedHosts` | `AllowedHosts` | `*` | Host filter for the ASP.NET Core server |
+
+Example override in PowerShell:
+```powershell
+$env:LlmSettings__Provider = "OpenAI"
+$env:LlmSettings__OpenAI__ApiKey = "sk-..."
+```
 
 > ⚠️ Never commit real API keys. Use environment variables or user secrets for production credentials.
 
