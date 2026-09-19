@@ -12,6 +12,7 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
@@ -19,9 +20,23 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+
+    // Swagger UI reads the existing .NET 10 OpenAPI document (/openapi/v1.json).
+    // Swashbuckle is used only for the UI, never as a second spec generator.
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/openapi/v1.json", "Citizen Services Copilot v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
-app.UseHttpsRedirection();
+// In Development no HTTPS port is configured, so UseHttpsRedirection cannot resolve
+// a redirect target and logs "Failed to determine the https port for redirect".
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.MapPost("/api/inquiries", async (
     SubmitInquiryRequest request,
@@ -88,6 +103,9 @@ app.MapPost("/api/documents/text", async (
         : Results.Created($"/api/documents/{result.DocumentId}", response);
 })
 .WithName("IngestTextDocument");
+
+app.MapGet("/", () => Results.Redirect("/swagger"))
+    .ExcludeFromDescription();
 
 app.Run();
 
