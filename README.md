@@ -308,8 +308,17 @@ $env:LlmSettings__OpenAI__ApiKey = "sk-..."
 
 | Method | Path | Description |
 |---|---|---|
+| `POST` | `/api/auth/login` | Obtain a JWT bearer token (`{ "userId": "...", "role": "Citizen" \| "Officer" }`) |
 | `POST` | `/api/documents/text` | Ingest a raw text document (chunking + embedding + persistence) |
 | `POST` | `/api/inquiries` | Submit a citizen question (cost check → retrieval → agents → draft) |
+| `POST` | `/api/workflows/citizen-response` | Run the citizen-response workflow (budget pre-flight → retrieval → agents → approval gate) |
+| `GET` | `/api/workflows/stream` | Subscribe to a running workflow's event stream (SSE) |
+| `GET` | `/api/runs/{runId}` | Run summary with the persisted agent `steps` array |
+| `GET` | `/api/runs/{runId}/trace` | Full audit trail: correlation id + per-step timing/tokens/cost |
+| `GET` | `/api/users/{userId}/spend` | Aggregated token/cost accounting for a user |
+| `POST` | `/api/runs/{runId}/approve` \| `/reject` \| `/edit-and-approve` | Officer decision on a pending draft |
+| `GET` | `/health` | Liveness probe (`200 {"status": "Healthy", ...}`) |
+| `GET` | `/ready` | Readiness probe (checks EF store; `503` when unreachable) |
 
 ### `POST /api/documents/text`
 
@@ -553,17 +562,43 @@ question is omitted it is prompted on stdin. Exit code `0` for `Approved`/
 
 ## 5-Minute Demo Path
 
-> Based **only** on currently working capabilities.
+> Based **only** on currently working capabilities. Full flow:
+> **login → ingest → ask → run workflow → approve → trace → spend**.
 
 1. **Start infrastructure:** `docker compose up -d`
 2. **Apply migrations:** `dotnet ef database update --project src/CitizenServicesCopilot.Infrastructure --startup-project src/CitizenServicesCopilot.Api`
 3. **Start Ollama** and pull models: `ollama pull nomic-embed-text && ollama pull llama3.2:1b`
 4. **Run API:** `dotnet run --project src/CitizenServicesCopilot.Api`
-5. **Ingest a regulation** via `POST /api/documents/text` (see Quick Start example)
-6. **Re-submit the same document** → observe `isDuplicate: true` (SHA-256 idempotency)
-7. **Ask a grounded question** via `POST /api/inquiries` with a question matching the ingested content
-8. **Ask an unrelated question** → observe the grounded refusal response (`isRefusal: true`)
-9. **Run the test suite:** `dotnet test` → 191/191 passing
+5. **Login as a citizen:** `POST /api/auth/login` with `{ "userId": "citizen-1", "role": "Citizen" }` → keep the bearer token (needed for trace/spend later).
+6. **Ingest a regulation** via `POST /api/documents/text` (see Quick Start example); re-submitting the same document → observe `isDuplicate: true` (SHA-256 idempotency).
+7. **Ask a grounded question** via `POST /api/workflows/citizen-response` with `{ "userId": "citizen-1", "question": "..." }` matching the ingested content, and store the returned `runId`.
+8. **Run the workflow live** — open `GET /api/workflows/stream` (SSE) and watch the run progress through the agent stages until it reaches `PendingApproval`.
+9. **Approve the draft:** login as an officer (`POST /api/auth/login`, role `Officer`), then `POST /api/runs/{runId}/approve` with the officer bearer token.
+10. **Trace the run:** `GET /api/runs/{runId}/trace` shows the full audit trail — correlation id, per-step timing/tokens/cost, and the approval record.
+11. **Check spend:** `GET /api/users/{userId}/spend` shows the citizen's aggregated tokens/cost after the run.
+12. **Ask an unrelated question** (e.g. an off-corpus query) → observe the grounded refusal (`isRefusal: true`).
+13. **Run the test suite:** `dotnet test` → 191/191 passing
+
+## Demo Video
+
+[Watch the 5-8 minute product demo](TO_BE_FILLED)
+
+## Teaching Video
+
+[Watch the 10-minute teaching sample](TO_BE_FILLED)
+
+## Teaching Pack
+
+Materials to teach this repository as a case study (OWASP LLM Top 10 applied
+to a grounded government copilot), located under `teaching/`:
+
+- `teaching/slides.md` — 25-slide deck: "OWASP LLM in Practice — Lessons from a
+  Grounded Government Copilot"
+- `teaching/lab.md` — hands-on lab: "Break the Refusal Gate, Then Fix It"
+  (tasks, stretch challenges, answer key)
+- `teaching/outcomes.md` — learning outcomes (LO1..LO6) and assessment map
+- `teaching/common-mistakes.md` — five trainee misconceptions with
+  repo-backed corrections
 
 ## Current Limitations & Deferred Work
 
