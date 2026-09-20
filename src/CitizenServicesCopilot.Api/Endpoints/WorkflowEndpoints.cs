@@ -24,7 +24,14 @@ public static class WorkflowEndpoints
         // implementation yet (Checkpoint C wires the real cost governor), so a
         // temporary no-op keeps the orchestrator resolvable in the meantime.
         services.AddScoped<WorkflowOrchestrator>();
-        services.AddScoped<OrchestratorOptions>(_ => new OrchestratorOptions());
+        services.AddScoped<OrchestratorOptions>(sp =>
+        {
+            var options = new OrchestratorOptions();
+            sp.GetRequiredService<IConfiguration>()
+                .GetSection(OrchestratorOptions.SectionName)
+                .Bind(options);
+            return options;
+        });
         services.AddScoped<IBudgetPreFlightCheck>(_ => new NoOpBudgetPreFlightCheck());
         return services;
     }
@@ -34,7 +41,7 @@ public static class WorkflowEndpoints
         // POST /api/workflows/citizen-response
         app.MapPost("/api/workflows/citizen-response", async (
             SubmitWorkflowRequest request,
-            WorkflowOrchestrator orchestrator,
+            IServiceProvider services,
             IConfiguration config,
             ILogger<WorkflowOrchestrator> logger,
             CancellationToken ct) =>
@@ -54,6 +61,11 @@ public static class WorkflowEndpoints
             {
                 try
                 {
+                    // Resolve in a dedicated scope: the request scope (and its
+                    // scoped EF DbContext) is disposed when the handler returns
+                    // its 202, which would break any long-running background work.
+                    using var scope = services.CreateScope();
+                    var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
                     await orchestrator.RunAsync(request.UserId, request.Question, modelName, CancellationToken.None, runId);
                 }
                 catch (Exception ex)
