@@ -86,6 +86,48 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     }
 
     [Fact]
+    public async Task Post_CitizenResponse_BackgroundRunLeavesInitialStatusWithinTwoSeconds()
+    {
+        // Regression for the CI ObjectDisposedException: the fire-and-forget
+        // background task used to resolve the orchestrator in a scope derived
+        // from the request provider, which is disposed the moment the handler
+        // returns 202 - killing the DbContext mid-run and leaving the persisted
+        // run stuck at its initial status. Today the run must advance out of
+        // NotStarted/Created within 2s (Running, Completed, or Failed).
+        var citizen = await _factory.CreateAuthenticatedClientAsync($"u-bg-{Guid.NewGuid():N}", "Citizen");
+        var resp = await citizen.PostAsJsonAsync("/api/workflows/citizen-response",
+            new { question = "Voter registration procedure?" });
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+        var runId = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("runId").GetString()!;
+
+        var progressed = false;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(2);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var runResp = await citizen.GetAsync($"/api/runs/{runId}");
+            if (runResp.StatusCode == HttpStatusCode.OK)
+            {
+                var body = await runResp.Content.ReadFromJsonAsync<JsonElement>();
+                var status = body.GetProperty("status").GetString()!;
+                if (status is not ("NotStarted" or "Created"))
+                {
+                    progressed = true;
+                }
+            }
+            runResp.Dispose();
+            if (progressed)
+            {
+                break;
+            }
+            await Task.Delay(100);
+        }
+
+        Assert.True(progressed,
+            "Background run did not leave its initial status within 2s " +
+            "(request scope was disposed before the orchestrator persisted the run).");
+    }
+
+    [Fact]
     public async Task Get_Run_NotFound_Returns404()
     {
         var citizen = await _factory.CreateAuthenticatedClientAsync("u-reader", "Citizen");

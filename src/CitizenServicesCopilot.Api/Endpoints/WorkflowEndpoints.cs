@@ -19,9 +19,27 @@ using Microsoft.Extensions.Logging;
 
 namespace CitizenServicesCopilot.Api.Endpoints;
 
-public static class WorkflowEndpoints
+/// <summary>
+/// Workflow endpoints. POST citizen-response is fire-and-forget: the handler
+/// returns 202 before the workflow terminates, so its background run resolves
+/// scoped dependencies (EF DbContext, orchestrator, correlation context) from a
+/// dedicated root-anchored DI scope. The scope factory and logger are injected
+/// at the class level, never as per-request handler parameters, so the
+/// background task cannot capture request-scoped services that get disposed
+/// when the request ends.
+/// </summary>
+public sealed class WorkflowEndpoints
 {
-    public static IServiceCollection AddWorkflowServices(this IServiceCollection services)
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<WorkflowEndpoints> _logger;
+
+    public WorkflowEndpoints(IServiceScopeFactory scopeFactory, ILogger<WorkflowEndpoints> logger)
+    {
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public static IServiceCollection AddWorkflowServices(IServiceCollection services)
     {
         // WorkflowOrchestrator is not registered by AddApplicationServices. Register
         // it here so endpoints can resolve it.
@@ -34,19 +52,21 @@ public static class WorkflowEndpoints
                 .Bind(options);
             return options;
         });
+
+        // Constructor-injected endpoint class: holds the root-able scope factory
+        // and the endpoint logger for the fire-and-forget background path.
+        services.AddSingleton<WorkflowEndpoints>();
         return services;
     }
 
-    public static IEndpointRouteBuilder MapWorkflowEndpoints(this IEndpointRouteBuilder app)
+    public IEndpointRouteBuilder MapWorkflowEndpoints(IEndpointRouteBuilder app)
     {
         // POST /api/workflows/citizen-response
         app.MapPost("/api/workflows/citizen-response", async (
             SubmitWorkflowRequest request,
             HttpContext http,
-            IServiceProvider services,
             IConfiguration config,
             ICorrelationContext requestCorrelation,
-            ILogger<WorkflowOrchestrator> logger,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Question))
@@ -70,23 +90,29 @@ public static class WorkflowEndpoints
             var correlationId = requestCorrelation.CorrelationId;
 
             // TODO-D: Replace fire-and-forget with a durable queue (Checkpoint D).
-            // Current implementation risks task loss on app restart. Documented in
-            // SDD Part B gap table.
+            // Preferred production design: enqueue a work item on a Channel<T>
+            // drained by an IHostedService (BackgroundService) worker, decoupling
+            // run execution from the HTTP request so runs survive app restarts.
+            // Deferred here; the dedicated root-anchored scope below is the
+            // working MVP pattern. The worker approach is documented in the SDD
+            // Part B gap table.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    // Resolve in a dedicated scope: the request scope (and its
-                    // scoped EF DbContext) is disposed when the handler returns
-                    // its 202, which would break any long-running background work.
-                    using var scope = services.CreateScope();
+                    // Dedicated DI scope created from the root scope factory, not
+                    // from the request provider: request services are disposed
+                    // the moment this handler returns its 202, which would crash
+                    // a long-running background workflow with ObjectDisposed
+                    // Exception and lose the persisted run entirely.
+                    await using var scope = _scopeFactory.CreateAsyncScope();
                     scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = correlationId;
                     var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
                     await orchestrator.RunAsync(userId, request.Question, modelName, CancellationToken.None, runId);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Workflow {RunId} failed in background task", runId);
+                    _logger.LogError(ex, "Workflow {RunId} failed in background task", runId);
                 }
             });
 

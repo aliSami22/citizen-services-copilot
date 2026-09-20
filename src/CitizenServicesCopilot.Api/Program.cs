@@ -15,7 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
-builder.Services.AddWorkflowServices();
+WorkflowEndpoints.AddWorkflowServices(builder.Services);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -186,7 +186,7 @@ app.MapGet("/ready", async (AppDbContext db, CancellationToken ct) =>
     })
     .WithTags("Ops");
 
-app.MapWorkflowEndpoints();
+app.Services.GetRequiredService<WorkflowEndpoints>().MapWorkflowEndpoints(app);
 app.MapAuthEndpoints(builder.Configuration);
 
 app.Run();
