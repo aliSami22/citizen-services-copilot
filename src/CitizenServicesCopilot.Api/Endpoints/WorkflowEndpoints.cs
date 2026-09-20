@@ -20,9 +20,7 @@ public static class WorkflowEndpoints
     public static IServiceCollection AddWorkflowServices(this IServiceCollection services)
     {
         // WorkflowOrchestrator is not registered by AddApplicationServices. Register
-        // it here so endpoints can resolve it. IBudgetPreFlightCheck has no concrete
-        // implementation yet (Checkpoint C wires the real cost governor), so a
-        // temporary no-op keeps the orchestrator resolvable in the meantime.
+        // it here so endpoints can resolve it.
         services.AddScoped<WorkflowOrchestrator>();
         services.AddScoped<OrchestratorOptions>(sp =>
         {
@@ -32,7 +30,6 @@ public static class WorkflowEndpoints
                 .Bind(options);
             return options;
         });
-        services.AddScoped<IBudgetPreFlightCheck>(_ => new NoOpBudgetPreFlightCheck());
         return services;
     }
 
@@ -207,11 +204,6 @@ public static class WorkflowEndpoints
     private static bool IsOfficer(HttpContext http) =>
         http.Request.Headers.TryGetValue("X-Role", out var role) &&
         string.Equals(role.ToString(), OfficerRole, StringComparison.OrdinalIgnoreCase);
-
-    private sealed class NoOpBudgetPreFlightCheck : IBudgetPreFlightCheck
-    {
-        public Task ThrowIfExceededAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
-    }
 
     private static ApprovalResponse ToApprovalResponse(ApprovalAudit a) => new(
         Id: a.Id,

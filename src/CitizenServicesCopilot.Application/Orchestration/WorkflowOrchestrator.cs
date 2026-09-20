@@ -21,6 +21,11 @@ public class WorkflowOrchestrator
 {
     public const string PersistDraftToolName = ToolCatalog.PersistDraft;
 
+    /// <summary>
+    /// Terminal failure reason recorded when the budget gate blocks a run.
+    /// </summary>
+    public const string BudgetExceededReason = "budget exceeded";
+
     private const string DegradationNote = "graceful degradation to plain RAG after agent chain failure";
     private const string InsufficientEvidence = "insufficient evidence";
 
@@ -80,9 +85,6 @@ public class WorkflowOrchestrator
     {
         ct.ThrowIfCancellationRequested();
 
-        // Budget pre-flight hook (concrete cost governor wired in Checkpoint C).
-        await _budgetCheck.ThrowIfExceededAsync(userId, ct);
-
         var run = WorkflowRun.Create(userId, runId);
         await _runs.AddAsync(run, ct);
         run = run with { Status = RunStatus.Running };
@@ -104,14 +106,34 @@ public class WorkflowOrchestrator
 
             input = input with { ContextChunks = retrieval.Chunks.Select(c => c.Chunk).ToList() };
 
+            // Budget gate: evaluated before the first agent and between stages.
+            // Denied/WouldExceed terminates the run with a hard cut-off.
+            var budgetFail = await EnforceBudgetAsync(run, query, ct);
+            if (budgetFail is not null)
+            {
+                return budgetFail;
+            }
+
             AgentStep draftStep;
             try
             {
                 var eligibilityStep = await RunStageAsync(AgentRole.EligibilityIdentifier, input, ct);
                 recordedSteps.Add(eligibilityStep);
 
+                budgetFail = await EnforceBudgetAsync(run, query, ct);
+                if (budgetFail is not null)
+                {
+                    return budgetFail;
+                }
+
                 var procedureStep = await RunStageAsync(AgentRole.ProcedureResolver, input, ct);
                 recordedSteps.Add(procedureStep);
+
+                budgetFail = await EnforceBudgetAsync(run, query, ct);
+                if (budgetFail is not null)
+                {
+                    return budgetFail;
+                }
 
                 draftStep = await RunStageAsync(AgentRole.ResponseDrafter, input, ct);
                 recordedSteps.Add(draftStep);
@@ -423,6 +445,29 @@ public class WorkflowOrchestrator
         RunId = runId,
         Order = _stepOrder++
     };
+
+    /// <summary>
+    /// Budget gate with a hard cut-off: Denied (hard-blocked) or WouldExceed
+    /// terminates the run with <see cref="BudgetExceededReason"/>. Returns null
+    /// when the run may proceed.
+    /// </summary>
+    private async Task<WorkflowRun?> EnforceBudgetAsync(WorkflowRun run, string query, CancellationToken ct)
+    {
+        var result = await _budgetCheck.CheckAsync(run.UserId, EstimateTokens(query), ct);
+        if (result == BudgetCheckResult.Allowed)
+        {
+            return null;
+        }
+
+        return await FailAsync(run, BudgetExceededReason, ct);
+    }
+
+    /// <summary>
+    /// Rough token estimate for a stage/run: ~1 token per 4 chars plus a fixed
+    /// context overhead. One conservative estimate is reused for every gate.
+    /// </summary>
+    private static int EstimateTokens(string query) =>
+        Math.Max(1000, (query.Length / 4) + 700);
 
     private async Task<WorkflowRun> FailAsync(WorkflowRun run, string reason, CancellationToken ct)
     {

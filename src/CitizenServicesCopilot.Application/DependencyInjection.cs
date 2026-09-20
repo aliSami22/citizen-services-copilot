@@ -13,6 +13,9 @@ public static class DependencyInjection
         // Cost Governor Service
         services.AddScoped<ICostGovernor, CostGovernorService>();
 
+        // Budget gate (real implementation; no-op fallback when no record exists)
+        services.AddScoped<IBudgetPreFlightCheck, Services.BudgetPreFlightCheck>();
+
         // Prompt provider (embedded resources) and specialized agents
         services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();

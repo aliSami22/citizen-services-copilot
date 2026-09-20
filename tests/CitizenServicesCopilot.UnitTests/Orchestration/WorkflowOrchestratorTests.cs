@@ -415,7 +415,8 @@ public class WorkflowOrchestratorTests
 
     private sealed class AlwaysOkPreFlight : IBudgetPreFlightCheck
     {
-        public Task ThrowIfExceededAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
+            => Task.FromResult(BudgetCheckResult.Allowed);
     }
 
     private sealed class InMemoryRuns : IWorkflowRunRepository
