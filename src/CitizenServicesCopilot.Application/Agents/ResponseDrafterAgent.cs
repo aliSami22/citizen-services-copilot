@@ -1,22 +1,37 @@
 using System.Text;
 using System.Text.Json;
+using CitizenServicesCopilot.Application.Common;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
+using CitizenServicesCopilot.Application.Services.Prompts;
+using CitizenServicesCopilot.Application.Services.Tools;
+using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.ValueObjects;
+using CitizenServicesCopilot.Domain.Workflows;
 using Citation = CitizenServicesCopilot.Domain.ValueObjects.Citation;
 
 namespace CitizenServicesCopilot.Application.Agents;
 
-public class ResponseDrafterAgent
+public class ResponseDrafterAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
+    private readonly IPromptProvider _promptProvider;
 
     public const string StandardRefusalPhrase = "Not enough information in the corpus";
 
-    public ResponseDrafterAgent(ILLMProvider llmProvider)
+    public AgentRole Role => AgentRole.ResponseDrafter;
+
+    public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string>
+    {
+        ToolCatalog.SearchCorpus,
+        ToolCatalog.ComputeFee
+    };
+
+    public ResponseDrafterAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
     {
         _llmProvider = llmProvider;
+        _promptProvider = promptProvider;
     }
 
     public async Task<(InquiryDraft Draft, int TokensUsed)> DraftResponseAsync(
@@ -87,7 +102,88 @@ public class ResponseDrafterAgent
         var response = await _llmProvider.GenerateCompletionAsync(prompt, ct);
         var content = response.Content.Trim();
 
-        // Build citations directly from the grounding chunks
+        var draft = BuildDraft(content, contextChunks, response.TotalTokens, eligibilitySummary, procedureSummary);
+
+        return (ToInquiryDraft(draft), draft.TokensUsed);
+    }
+
+    public async Task<AgentStep> ExecuteAsync(AgentInput input, CancellationToken ct)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+
+        if (input.ContextChunks.Count == 0)
+        {
+            return new AgentStep(
+                Role: Role,
+                Status: AgentStepStatus.Failed,
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                OutputSummary: null,
+                ErrorMessage: "No evidence to draft a grounded response.");
+        }
+
+        try
+        {
+            var eligibilitySummary = ExtractPriorOutput(input.PriorSteps, AgentRole.EligibilityIdentifier);
+            var procedureSummary = ExtractPriorOutput(input.PriorSteps, AgentRole.ProcedureResolver);
+
+            var template = await _promptProvider.GetPromptAsync(PromptKeys.ResponseDrafter, ct);
+            var prompt = template
+                .Replace("{context}", PromptContextBuilder.FormatChunks(input.ContextChunks))
+                .Replace("{query}", input.Query)
+                .Replace("{eligibility_summary}", eligibilitySummary)
+                .Replace("{procedure_summary}", procedureSummary);
+
+            var llmPrompt = new LlmPrompt(
+                Messages: new List<LlmMessage>
+                {
+                    new("system", prompt),
+                    new("user", $"Citizen Question: {input.Query}\nSynthesize the final JSON draft response.")
+                },
+                ModelName: input.ModelName,
+                Temperature: 0.0f,
+                MaxTokens: 800
+            );
+
+            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+
+            var draft = BuildDraft(
+                response.Content.Trim(),
+                input.ContextChunks,
+                response.TotalTokens,
+                eligibilitySummary,
+                procedureSummary);
+
+            var draftJson = JsonSerializer.Serialize(draft, JsonOptions.CamelCase);
+
+            return new AgentStep(
+                Role: Role,
+                Status: AgentStepStatus.Succeeded,
+                CreatedAtUtc: startedAt,
+                OutputSummary: draftJson,
+                TokensOut: draft.TokensUsed);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new AgentStep(Role: Role, Status: AgentStepStatus.Failed, CreatedAtUtc: DateTimeOffset.UtcNow, ErrorMessage: ex.Message);
+        }
+    }
+
+    private static string ExtractPriorOutput(IReadOnlyList<AgentStep> priorSteps, AgentRole role)
+        => priorSteps
+            .FirstOrDefault(step => step.Role == role && step.Status == AgentStepStatus.Succeeded && step.OutputSummary is not null)
+            ?.OutputSummary ?? string.Empty;
+
+    private static DraftResponse BuildDraft(
+        string content,
+        IReadOnlyList<DocumentChunk> contextChunks,
+        int tokensUsed,
+        string eligibilitySummary,
+        string procedureSummary)
+    {
         var citations = contextChunks.Select(c => new Citation(
             DocumentTitle: c.Document?.Title ?? "Official Decree",
             Source: c.Document?.Source ?? "Official Gazette",
@@ -96,24 +192,13 @@ public class ResponseDrafterAgent
             QuoteSnippet: c.Content.Length > 160 ? c.Content[..160] + "..." : c.Content
         )).ToList();
 
-        // Check for refusal in raw text
         if (content.Contains(StandardRefusalPhrase, StringComparison.OrdinalIgnoreCase))
         {
-            return (new InquiryDraft
-            {
-                IsRefusal = true,
-                RefusalReason = StandardRefusalPhrase,
-                EligibilitySummary = StandardRefusalPhrase,
-                ProcedureSteps = StandardRefusalPhrase,
-                RequiredDocuments = StandardRefusalPhrase,
-                FeesAndTimeline = StandardRefusalPhrase,
-                Citations = new List<Citation>()
-            }, response.TotalTokens);
+            return NewRefusal(tokensUsed);
         }
 
         try
         {
-            // Attempt JSON parse
             var jsonStart = content.IndexOf('{');
             var jsonEnd = content.LastIndexOf('}');
             if (jsonStart >= 0 && jsonEnd > jsonStart)
@@ -127,16 +212,7 @@ public class ResponseDrafterAgent
 
                 if (isRefusal)
                 {
-                    return (new InquiryDraft
-                    {
-                        IsRefusal = true,
-                        RefusalReason = refusalReason ?? StandardRefusalPhrase,
-                        EligibilitySummary = StandardRefusalPhrase,
-                        ProcedureSteps = StandardRefusalPhrase,
-                        RequiredDocuments = StandardRefusalPhrase,
-                        FeesAndTimeline = StandardRefusalPhrase,
-                        Citations = new List<Citation>()
-                    }, response.TotalTokens);
+                    return NewRefusal(tokensUsed, refusalReason ?? StandardRefusalPhrase);
                 }
 
                 string elig = root.TryGetProperty("eligibility", out var eProp) ? eProp.GetString() ?? "" : "";
@@ -144,15 +220,15 @@ public class ResponseDrafterAgent
                 string steps = root.TryGetProperty("procedureSteps", out var sProp) ? sProp.GetString() ?? "" : "";
                 string fees = root.TryGetProperty("feesAndTimeline", out var fProp) ? fProp.GetString() ?? "" : "";
 
-                return (new InquiryDraft
-                {
-                    IsRefusal = false,
-                    EligibilitySummary = elig,
-                    RequiredDocuments = docs,
-                    ProcedureSteps = steps,
-                    FeesAndTimeline = fees,
-                    Citations = citations
-                }, response.TotalTokens);
+                return new DraftResponse(
+                    IsRefusal: false,
+                    RefusalReason: null,
+                    EligibilitySummary: elig,
+                    RequiredDocuments: docs,
+                    ProcedureSteps: steps,
+                    FeesAndTimeline: fees,
+                    Citations: citations,
+                    TokensUsed: tokensUsed);
             }
         }
         catch
@@ -160,14 +236,37 @@ public class ResponseDrafterAgent
             // Fallback to formatted text response
         }
 
-        return (new InquiryDraft
-        {
-            IsRefusal = false,
-            EligibilitySummary = eligibilitySummary,
-            ProcedureSteps = procedureSummary,
-            RequiredDocuments = procedureSummary,
-            FeesAndTimeline = procedureSummary,
-            Citations = citations
-        }, response.TotalTokens);
+        return new DraftResponse(
+            IsRefusal: false,
+            RefusalReason: null,
+            EligibilitySummary: eligibilitySummary,
+            RequiredDocuments: procedureSummary,
+            ProcedureSteps: procedureSummary,
+            FeesAndTimeline: procedureSummary,
+            Citations: citations,
+            TokensUsed: tokensUsed);
     }
+
+    private static DraftResponse NewRefusal(int tokensUsed, string? reason = null)
+        => new(
+            IsRefusal: true,
+            RefusalReason: reason ?? StandardRefusalPhrase,
+            EligibilitySummary: StandardRefusalPhrase,
+            RequiredDocuments: StandardRefusalPhrase,
+            ProcedureSteps: StandardRefusalPhrase,
+            FeesAndTimeline: StandardRefusalPhrase,
+            Citations: new List<Citation>(),
+            TokensUsed: tokensUsed);
+
+    private static InquiryDraft ToInquiryDraft(DraftResponse draft)
+        => new()
+        {
+            IsRefusal = draft.IsRefusal,
+            RefusalReason = draft.RefusalReason,
+            EligibilitySummary = draft.EligibilitySummary,
+            ProcedureSteps = draft.ProcedureSteps,
+            RequiredDocuments = draft.RequiredDocuments,
+            FeesAndTimeline = draft.FeesAndTimeline,
+            Citations = new List<Citation>(draft.Citations)
+        };
 }

@@ -145,6 +145,66 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
+## Obtaining an API Key (OpenAI) or Running Locally (Ollama)
+
+Two ways to run the LLM and embedding providers. No API key is needed for the
+local Ollama path.
+
+### Option A — OpenAI free tier (managed)
+
+1. Create an account at <https://platform.openai.com> and sign in.
+2. Open **API keys** → **Create new secret key**, copy the `sk-...` value and
+   store it somewhere safe (you will not be able to see it again).
+3. Configure the app to use the key. Do **not** edit the key into
+   `appsettings.json` (it is committed to git). Use an environment variable:
+
+   ```powershell
+   $env:LlmSettings__Provider = "OpenAI"
+   $env:LlmSettings__OpenAI__ApiKey = "sk-..."
+   ```
+
+   Then start the API with those variables in the same shell:
+   ```powershell
+   dotnet run --project src/CitizenServicesCopilot.Api
+   ```
+
+4. Note: new OpenAI accounts include trial credit; usage is billed to your
+   account when the credit runs out. Budgets are enforced per user by the
+   cost governor (T3 twist) before any LLM call.
+
+### Option B — local Ollama (default, no key)
+
+The default `LlmSettings:Provider` is `Ollama`, so no key is required.
+
+1. Install Ollama from <https://ollama.com>.
+2. Start the server. On Windows/macOS the tray app keeps `ollama serve`
+   running on `http://localhost:11434`. To start it manually:
+
+   ```bash
+   ollama serve
+   ```
+
+3. Pull the models the app reads from `LlmSettings:Ollama`:
+
+   ```bash
+   ollama pull nomic-embed-text
+   ollama pull llama3.2:1b
+   ollama pull llama3.1:8b
+   ```
+
+4. Verify the server is reachable:
+
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+   This should return a JSON list containing the pulled models.
+
+5. Run the API:
+   ```bash
+   dotnet run --project src/CitizenServicesCopilot.Api
+   ```
+
 ## Quick Start
 
 ### 1. Start the database
@@ -200,21 +260,32 @@ curl -X POST http://localhost:5177/api/inquiries \
 
 ## Environment Variables / Configuration
 
-All configuration is in `appsettings.json` / `appsettings.Development.json`:
+All settings are read from `appsettings.json` / `appsettings.Development.json`.
+Every key below can also be supplied as an environment variable using the
+ASP.NET Core convention (hierarchy separator `:` becomes `__`), which
+overrides the JSON value.
 
-| Key | Default | Description |
-|---|---|---|
-| `ConnectionStrings:DefaultConnection` | `Host=localhost;Port=5432;Database=citizenservices;Username=postgres;Password=postgrespassword` | PostgreSQL connection string |
-| `LlmSettings:Provider` | `Ollama` | Active LLM/embedding provider. Set to `OpenAI` or `Ollama` |
-| `LlmSettings:OpenAI:ApiKey` | *(empty)* | OpenAI API key. **Required** if Provider is `OpenAI` |
-| `LlmSettings:OpenAI:BaseUrl` | `https://api.openai.com/v1` | OpenAI API base URL |
-| `LlmSettings:OpenAI:CheapModel` | `gpt-4o-mini` | Model for simple queries (OpenAI) |
-| `LlmSettings:OpenAI:ExpensiveModel` | `gpt-4o` | Model for complex queries (OpenAI) |
-| `LlmSettings:OpenAI:EmbeddingModel` | `text-embedding-3-small` | Embedding model (OpenAI) |
-| `LlmSettings:Ollama:BaseUrl` | `http://localhost:11434` | Ollama server URL |
-| `LlmSettings:Ollama:CheapModel` | `llama3.2:1b` | Model for simple queries (Ollama) |
-| `LlmSettings:Ollama:ExpensiveModel` | `llama3.1:8b` | Model for complex queries (Ollama) |
-| `LlmSettings:Ollama:EmbeddingModel` | `nomic-embed-text` | Embedding model (Ollama) |
+| Configuration key | Environment variable | Default | Description |
+|---|---|---|---|
+| `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` | `Host=localhost;Port=5432;Database=citizenservices;Username=postgres;Password=postgrespassword` | PostgreSQL (pgvector) connection string |
+| `LlmSettings:Provider` | `LlmSettings__Provider` | `Ollama` | Active LLM/embedding provider. `OpenAI` or `Ollama` |
+| `LlmSettings:OpenAI:ApiKey` | `LlmSettings__OpenAI__ApiKey` | *(empty)* | OpenAI API key. **Required** when Provider is `OpenAI` |
+| `LlmSettings:OpenAI:BaseUrl` | `LlmSettings__OpenAI__BaseUrl` | `https://api.openai.com/v1` | OpenAI API base URL |
+| `LlmSettings:OpenAI:CheapModel` | `LlmSettings__OpenAI__CheapModel` | `gpt-4o-mini` | Model for simple queries (OpenAI) |
+| `LlmSettings:OpenAI:ExpensiveModel` | `LlmSettings__OpenAI__ExpensiveModel` | `gpt-4o` | Model for complex queries (OpenAI) |
+| `LlmSettings:OpenAI:EmbeddingModel` | `LlmSettings__OpenAI__EmbeddingModel` | `text-embedding-3-small` | Embedding model (OpenAI) |
+| `LlmSettings:Ollama:BaseUrl` | `LlmSettings__Ollama__BaseUrl` | `http://localhost:11434` | Ollama server URL |
+| `LlmSettings:Ollama:CheapModel` | `LlmSettings__Ollama__CheapModel` | `llama3.2:1b` | Model for simple queries (Ollama) |
+| `LlmSettings:Ollama:ExpensiveModel` | `LlmSettings__Ollama__ExpensiveModel` | `llama3.1:8b` | Model for complex queries (Ollama) |
+| `LlmSettings:Ollama:EmbeddingModel` | `LlmSettings__Ollama__EmbeddingModel` | `nomic-embed-text` | Embedding model (Ollama) |
+| `Logging:LogLevel:*` | `Logging__LogLevel__*` | `Information` (`Debug` in Development) | ASP.NET Core log levels |
+| `AllowedHosts` | `AllowedHosts` | `*` | Host filter for the ASP.NET Core server |
+
+Example override in PowerShell:
+```powershell
+$env:LlmSettings__Provider = "OpenAI"
+$env:LlmSettings__OpenAI__ApiKey = "sk-..."
+```
 
 > ⚠️ Never commit real API keys. Use environment variables or user secrets for production credentials.
 
@@ -304,6 +375,66 @@ Test coverage areas:
 - Grounded retriever (dense search, keyword search, refusal, citation binding)
 - Hybrid fusion engine (RRF scoring, normalization, edge cases)
 - Query enhancer (domain synonym expansion, Arabic + English)
+
+## Troubleshooting
+
+### Local DB schema drift after pulling new migrations
+
+If `POST /api/documents/text` returns 500 with "column does not exist", run:
+
+```bash
+dotnet ef database update \
+  --project src/CitizenServicesCopilot.Infrastructure \
+  --startup-project src/CitizenServicesCopilot.Api
+```
+
+### Ollama not reachable -> 422 on POST /api/documents/text
+
+Symptom: `POST /api/documents/text` returns `422` with
+`"failureReason": "Vector embedding generation failed during document
+ingestion."`
+
+Cause: the default `LlmSettings:Provider` is `Ollama`, and the embedding
+generator (default model `nomic-embed-text`) cannot reach the server at
+`LlmSettings:Ollama:BaseUrl` (`http://localhost:11434`).
+
+Fix:
+```bash
+ollama serve
+ollama pull nomic-embed-text
+```
+
+Or switch to OpenAI and supply a key (see "Obtaining an API Key" above);
+embedding generation will use `LlmSettings:OpenAI:EmbeddingModel`.
+
+### Port 5177 already in use
+
+Symptom: `dotnet run` fails to start because `http://localhost:5177` is
+already bound (e.g. a previous API instance is still running).
+
+Fix — kill the process holding the port (Windows):
+```powershell
+netstat -ano | findstr :5177
+taskkill /PID <pid> /F
+```
+Linux/macOS:
+```bash
+lsof -ti:5177 | xargs kill
+```
+
+Alternative — change the port in
+`src/CitizenServicesCopilot.Api/Properties/launchSettings.json`
+(`http` profile → `applicationUrl`), then re-run.
+
+## Seeded Demo Accounts
+
+> Added in **Checkpoint D** (authentication & authorization).
+
+No demo accounts are seeded in the current codebase. The app has no
+authentication or authorization on any endpoint yet (see Current Limitations);
+user identity is passed in the request body (`userId` on
+`POST /api/inquiries`). Demo credentials, roles (`Citizen`, `Officer`), and
+budget seeding will be documented here when auth lands in Checkpoint D.
 
 ## 5-Minute Demo Path
 

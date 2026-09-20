@@ -4,11 +4,17 @@ namespace CitizenServicesCopilot.Application.Common.Models;
 
 /// <summary>
 /// Encapsulates parameters for grounded document chunk retrieval.
+/// The absolute MinRelevanceScore gate alone is insufficient: RRF normalization gives a
+/// rank-1 candidate in EITHER list a combined score of ~0.50, so the refusal decision also
+/// consults per-list floors (raw dense/keyword evidence) and a relative-margin guard.
 /// </summary>
 public record RetrievalQuery(
     string Query,
     int TopK = 4,
-    double MinRelevanceScore = 0.40
+    double MinRelevanceScore = 0.40,
+    double KeywordFloor = 0.15,
+    double DenseFloor = 0.35,
+    double RelativeMarginThreshold = 0.40
 );
 
 /// <summary>

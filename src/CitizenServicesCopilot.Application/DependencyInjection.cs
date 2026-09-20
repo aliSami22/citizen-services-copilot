@@ -13,14 +13,19 @@ public static class DependencyInjection
         // Cost Governor Service
         services.AddScoped<ICostGovernor, CostGovernorService>();
 
-        // Specialized Agents
+        // Prompt provider (embedded resources) and specialized agents
+        services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();
         services.AddScoped<ProcedureResolverAgent>();
         services.AddScoped<ResponseDrafterAgent>();
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<EligibilityIdentifierAgent>());
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<ProcedureResolverAgent>());
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<ResponseDrafterAgent>());
 
         // Orchestrator & Human Review
         services.AddScoped<OrchestratorService>();
         services.AddScoped<HumanReviewService>();
+        services.AddScoped<IApprovalService, ApprovalService>();
 
         // Document Ingestion & Chunking (FR-1 baseline)
         services.AddTransient<Common.Interfaces.Ingestion.IDocumentExtractor, Services.Ingestion.PlainTextExtractor>();
@@ -30,6 +35,15 @@ public static class DependencyInjection
         // Retrieval Enhancement (FR-2)
         services.AddSingleton<Common.Interfaces.Retrieval.IQueryEnhancer, Services.Retrieval.QueryEnhancer>();
         services.AddSingleton<Services.Retrieval.HybridFusionEngine>();
+
+        // Tools (B4): read tools + the write-gated persist tool
+        services.AddScoped<ITool, Services.Tools.SearchCorpusTool>();
+        services.AddScoped<ITool, Services.Tools.GetRegulationVersionTool>();
+        services.AddScoped<ITool, Services.Tools.ComputeFeeTool>();
+        services.AddScoped<ITool, Services.Tools.PersistDraftTool>();
+        services.AddScoped<IToolRegistry, Services.Tools.ToolRegistry>();
+        services.AddSingleton<IToolSchemaValidator>(_ => new Services.Tools.ToolSchemaValidator(Services.Tools.ToolCatalog.Schemas));
+        services.AddScoped<IToolExecutor, Services.Tools.ToolExecutor>();
 
         return services;
     }

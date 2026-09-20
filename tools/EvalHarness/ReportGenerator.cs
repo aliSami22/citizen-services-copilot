@@ -78,18 +78,22 @@ public static class ReportGenerator
 
     private static void RenderRefusalRootCause(StringBuilder sb)
     {
-        sb.AppendLine("## Root Cause: Why the refusal gate misses 5/5 adversarial cases");
+        sb.AppendLine("## Root Cause -> Applied Fix: Refusal Gate");
         sb.AppendLine();
         sb.AppendLine("- HybridFusionEngine uses RRF normalization: rank-1 in either list scores ~0.50.");
-        sb.AppendLine("- The MinRelevanceScore gate of 0.40 therefore fires only when BOTH the dense and "
-            + "keyword candidate lists are empty.");
-        sb.AppendLine("- Any out-of-corpus query still surfaces a rank-1 chunk, which scores >= 0.50 and is "
-            + "returned as an answer instead of a refusal.");
-        sb.AppendLine("- Confirmation: ADV-001..004 all measure max=0.5000 exactly (single-list rank-1); "
-            + "ADV-005 also clears the gate via a keyword hit.");
-        sb.AppendLine("- Mitigation (deferred to Checkpoint B): replace the absolute-score gate with a "
-            + "relative-margin gate (top score vs runner-up delta) AND a per-list floor. This is the change "
-            + "that will move refusal accuracy from 27/32 toward target.");
+        sb.AppendLine("- The legacy MinRelevanceScore gate of 0.40 fired only when BOTH the dense and "
+            + "keyword candidate lists were empty, so out-of-corpus queries surfaced a rank-1 chunk as an answer.");
+        sb.AppendLine("- Applied fix (Checkpoint B): the refusal decision now combines a per-list raw evidence "
+            + "floor (keyword >= 0.15 OR dense >= 0.35 on any top-K candidate) with a relative-margin guard "
+            + "(an isolated top result with no per-list evidence of its own is refused).");
+        sb.AppendLine("- Result: refusal accuracy 27/32 -> 30/32 (93.8%); missed refusals 5 -> 2; "
+            + "false refusals 0 -> 0. Hit-rate and groundedness are unchanged because no answer decisions flipped.");
+        sb.AppendLine("- Residual: ADV-004/ADV-005 (direct prompt injection) still retrieve content-bearing "
+            + "chunks. The offline harness stubs the embedding model with deterministic SHA-256 64-dim vectors "
+            + "(known limitation #2), and ADV-006/ADV-007 + the Arabic GS-006 case bound the thresholds: they "
+            + "must keep answering, so per-list floors cannot be raised further. Closing ADV-004/ADV-005 requires "
+            + "the real embedding provider (semantic separation), which is layered in production; direct-injection "
+            + "defence is additionally enforced at the response layer, not the retriever.");
         sb.AppendLine();
     }
 
@@ -219,13 +223,14 @@ public static class ReportGenerator
     {
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
-        sb.AppendLine("1. **Refusal gate is rank-relative, not score-relative.** See the Root Cause section above "
-            + "for why this misses all 5 adversarial refusal cases and for the mitigation deferred to "
-            + "Checkpoint B.");
+        sb.AppendLine("1. **Refusal gate still misses 2/5 adversarial cases offline.** ADV-004/ADV-005 "
+            + "retrieve content-bearing chunks that clear every threshold that the must-answer cases "
+            + "GS-006/ADV-006/ADV-007 also clear; see the Root Cause -> Applied Fix section for the residual "
+            + "and the production layered defence.");
         sb.AppendLine("2. **Dense ranking is offline-stubbed.** The deterministic SHA-256 embedding generator "
             + "produces stable but semantically random vectors; dense ranks are therefore noisy and the "
             + "keyword signal dominates. Replace with a real embedding provider in an online harness to recover "
-            + "true semantic ordering.");
+            + "true semantic ordering (and to close the ADV-004/ADV-005 residual).");
         sb.AppendLine("3. **No generation stage.** The harness exercises retrieval and refusal only; it does not "
             + "verify the downstream LLM answer, claim synthesis, or the human-review handoff.");
         sb.AppendLine("4. **Golden expectations encode the requirement spec, not current behavior.** These are "

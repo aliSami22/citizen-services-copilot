@@ -48,9 +48,14 @@ internal static class Program
 
             runs.Add((goldenCase, result));
 
+            var top = result.Chunks.Count > 0 ? result.Chunks[0] : null;
+            string signals = top == null
+                ? "no-chunks"
+                : $"topD={top.DenseScore,6:F4} topK={top.KeywordScore,6:F4} topC={top.CombinedScore,6:F4}";
+
             Console.WriteLine(
                 $"[run] {goldenCase.Id,-8} category={goldenCase.AdversarialCategory ?? "standard",-24} " +
-                $"refuse={result.IsRefusal,-5} max={result.MaxScore,6:F4} chunks={result.Chunks.Count,-2} citations={result.Citations.Count}");
+                $"refuse={result.IsRefusal,-5} ch={result.Chunks.Count,-2} {signals}");
         }
 
         var report = MetricsCalculator.Compute(goldenSet, documents, runs);
