@@ -12,8 +12,8 @@ public sealed record WorkflowRun(
     decimal TotalCostUsd,
     string? ErrorMessage)
 {
-    public static WorkflowRun Create(string userId) => new(
-        Id: Guid.NewGuid(),
+    public static WorkflowRun Create(string userId, Guid? id = null) => new(
+        Id: id ?? Guid.NewGuid(),
         UserId: userId,
         Status: RunStatus.NotStarted,
         StartedAtUtc: DateTimeOffset.UtcNow,

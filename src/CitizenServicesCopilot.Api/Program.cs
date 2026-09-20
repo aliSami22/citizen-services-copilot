@@ -1,4 +1,5 @@
 using CitizenServicesCopilot.Api.DTOs;
+using CitizenServicesCopilot.Api.Endpoints;
 using CitizenServicesCopilot.Application;
 using CitizenServicesCopilot.Application.Common.Exceptions;
 using CitizenServicesCopilot.Application.Orchestration;
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddWorkflowServices();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -106,6 +108,8 @@ app.MapPost("/api/documents/text", async (
 
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
+
+app.MapWorkflowEndpoints();
 
 app.Run();
 

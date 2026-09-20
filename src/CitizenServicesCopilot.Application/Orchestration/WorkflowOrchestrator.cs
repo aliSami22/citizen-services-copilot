@@ -76,14 +76,14 @@ public class WorkflowOrchestrator
         }
     }
 
-    public async Task<WorkflowRun> RunAsync(string userId, string query, string modelName, CancellationToken ct = default)
+    public async Task<WorkflowRun> RunAsync(string userId, string query, string modelName, CancellationToken ct = default, Guid? runId = null)
     {
         ct.ThrowIfCancellationRequested();
 
         // Budget pre-flight hook (concrete cost governor wired in Checkpoint C).
         await _budgetCheck.ThrowIfExceededAsync(userId, ct);
 
-        var run = WorkflowRun.Create(userId);
+        var run = WorkflowRun.Create(userId, runId);
         await _runs.AddAsync(run, ct);
         run = run with { Status = RunStatus.Running };
         await _runs.UpdateAsync(run, ct);
