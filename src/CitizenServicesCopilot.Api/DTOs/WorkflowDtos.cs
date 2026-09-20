@@ -40,3 +40,13 @@ public record ApprovalResponse(
     string? Reason,
     string? ModifiedDraftJson,
     DateTimeOffset CreatedAtUtc);
+
+public record SpendViewResponse(
+    string UserId,
+    int TokensIn,
+    int TokensOut,
+    decimal CostUsd,
+    decimal BudgetLimitUsd,
+    decimal BudgetRemainingUsd,
+    DateTimeOffset PeriodStartUtc,
+    DateTimeOffset PeriodEndUtc);

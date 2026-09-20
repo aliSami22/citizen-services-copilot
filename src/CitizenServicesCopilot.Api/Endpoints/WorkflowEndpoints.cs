@@ -198,6 +198,50 @@ public static class WorkflowEndpoints
         .WithName("EditAndApproveWorkflowRun")
         .WithTags("Workflows");
 
+        // GET /api/users/{userId}/spend
+        app.MapGet("/api/users/{userId}/spend", async (
+            string userId,
+            IUserBudgetRepository budgetRepo,
+            IWorkflowRunRepository runRepo,
+            IAgentStepRepository stepRepo,
+            CancellationToken ct) =>
+        {
+            var budget = await budgetRepo.GetByUserIdAsync(userId, ct);
+            if (budget is null)
+            {
+                return Results.NotFound(new { message = $"No budget record for user '{userId}'." });
+            }
+
+            // Aggregated token/cost accounting from the user's persisted steps.
+            var tokensIn = 0;
+            var tokensOut = 0;
+            var costUsd = 0m;
+            var runs = await runRepo.GetByUserIdAsync(userId, ct);
+            foreach (var run in runs)
+            {
+                var steps = await stepRepo.GetForRunAsync(run.Id, ct);
+                tokensIn += steps.Sum(s => s.TokensIn ?? 0);
+                tokensOut += steps.Sum(s => s.TokensOut ?? 0);
+                costUsd += steps.Sum(s => s.CostUsd);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var periodStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, DateTimeOffset.UtcNow.Offset);
+            var periodEnd = periodStart.AddMonths(1);
+
+            return Results.Ok(new SpendViewResponse(
+                UserId: userId,
+                TokensIn: tokensIn,
+                TokensOut: tokensOut,
+                CostUsd: costUsd,
+                BudgetLimitUsd: budget.AllocatedBudgetUsd,
+                BudgetRemainingUsd: budget.AllocatedBudgetUsd - budget.SpentUsd,
+                PeriodStartUtc: periodStart,
+                PeriodEndUtc: periodEnd));
+        })
+        .WithName("GetUserSpend")
+        .WithTags("Workflows");
+
         return app;
     }
 

@@ -11,6 +11,8 @@ public interface IWorkflowRunRepository
 {
     Task<WorkflowRun?> GetByIdAsync(Guid runId, CancellationToken ct = default);
 
+    Task<IReadOnlyList<WorkflowRun>> GetByUserIdAsync(string userId, CancellationToken ct = default);
+
     Task AddAsync(WorkflowRun run, CancellationToken ct = default);
 
     Task UpdateAsync(WorkflowRun run, CancellationToken ct = default);

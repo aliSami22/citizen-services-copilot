@@ -16,6 +16,11 @@ public class EfWorkflowRunRepository : IWorkflowRunRepository
     public async Task<WorkflowRun?> GetByIdAsync(Guid runId, CancellationToken ct = default)
         => await _context.WorkflowRuns.FirstOrDefaultAsync(r => r.Id == runId, ct);
 
+    public async Task<IReadOnlyList<WorkflowRun>> GetByUserIdAsync(string userId, CancellationToken ct = default)
+        => await _context.WorkflowRuns
+            .Where(r => r.UserId == userId)
+            .ToListAsync(ct);
+
     public async Task AddAsync(WorkflowRun run, CancellationToken ct = default)
     {
         // Idempotent add: a repeated AddAsync for the same run updates it instead

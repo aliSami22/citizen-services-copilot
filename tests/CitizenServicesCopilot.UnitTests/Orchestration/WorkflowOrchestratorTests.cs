@@ -435,6 +435,9 @@ public class WorkflowOrchestratorTests
         public Task<WorkflowRun?> GetByIdAsync(Guid runId, CancellationToken ct = default)
             => Task.FromResult(_store.TryGetValue(runId, out var run) ? run : null);
 
+        public Task<IReadOnlyList<WorkflowRun>> GetByUserIdAsync(string userId, CancellationToken ct = default)
+            => Task.FromResult((IReadOnlyList<WorkflowRun>)_store.Values.Where(r => r.UserId == userId).ToList());
+
         public Task AddAsync(WorkflowRun run, CancellationToken ct = default)
         {
             _store[run.Id] = run;
