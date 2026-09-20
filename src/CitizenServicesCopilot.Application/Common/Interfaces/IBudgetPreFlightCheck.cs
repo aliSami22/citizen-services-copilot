@@ -1,15 +1,15 @@
+using CitizenServicesCopilot.Application.Common.Models;
+
 namespace CitizenServicesCopilot.Application.Common.Interfaces;
 
 /// <summary>
-/// Budget gate evaluated once before a workflow run starts. A concrete cost
-/// governor is wired in Checkpoint C; the placeholder keeps the orchestrator's
-/// contract explicit.
+/// Budget gate evaluated before the first agent stage and again between stages.
+/// Returns <see cref="BudgetCheckResult.Allowed"/> for users without a budget
+/// record (unrestricted), <see cref="BudgetCheckResult.Denied"/> for hard-blocked
+/// users, and <see cref="BudgetCheckResult.WouldExceed"/> when the estimated cost
+/// exceeds the remaining budget.
 /// </summary>
 public interface IBudgetPreFlightCheck
 {
-    /// <summary>
-    /// Throws <see cref="Application.Common.Exceptions.BudgetExceededException"/>
-    /// (or a budget-specific exception) when the user may not start a run.
-    /// </summary>
-    Task ThrowIfExceededAsync(string userId, CancellationToken ct = default);
+    Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default);
 }

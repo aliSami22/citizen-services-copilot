@@ -4,8 +4,8 @@ namespace CitizenServicesCopilot.Domain.Workflows;
 
 /// <summary>
 /// A single persisted stage/step of a workflow run. Role, status, summaries
-/// and token accounting describe what the step did; Id, RunId and Order are
-/// persistence concerns assigned by the orchestrator / repository.
+/// and token accounting describe what the step did; Id, RunId, Order and
+/// CorrelationId are persistence concerns assigned by the orchestrator / repository.
 /// </summary>
 public sealed record AgentStep(
     AgentRole Role,
@@ -21,4 +21,5 @@ public sealed record AgentStep(
     int? DurationMs = null,
     Guid Id = default,
     Guid RunId = default,
-    int Order = 0);
+    int Order = 0,
+    Guid? CorrelationId = null);

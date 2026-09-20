@@ -1,4 +1,10 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Channels;
 using CitizenServicesCopilot.Api.DTOs;
+using CitizenServicesCopilot.Api.Streaming;
 using CitizenServicesCopilot.Application.Common.Exceptions;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
@@ -13,16 +19,30 @@ using Microsoft.Extensions.Logging;
 
 namespace CitizenServicesCopilot.Api.Endpoints;
 
-public static class WorkflowEndpoints
+/// <summary>
+/// Workflow endpoints. POST citizen-response is fire-and-forget: the handler
+/// returns 202 before the workflow terminates, so its background run resolves
+/// scoped dependencies (EF DbContext, orchestrator, correlation context) from a
+/// dedicated root-anchored DI scope. The scope factory and logger are injected
+/// at the class level, never as per-request handler parameters, so the
+/// background task cannot capture request-scoped services that get disposed
+/// when the request ends.
+/// </summary>
+public sealed class WorkflowEndpoints
 {
-    private const string OfficerRole = "Officer";
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<WorkflowEndpoints> _logger;
 
-    public static IServiceCollection AddWorkflowServices(this IServiceCollection services)
+    public WorkflowEndpoints(IServiceScopeFactory scopeFactory, ILogger<WorkflowEndpoints> logger)
+    {
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public static IServiceCollection AddWorkflowServices(IServiceCollection services)
     {
         // WorkflowOrchestrator is not registered by AddApplicationServices. Register
-        // it here so endpoints can resolve it. IBudgetPreFlightCheck has no concrete
-        // implementation yet (Checkpoint C wires the real cost governor), so a
-        // temporary no-op keeps the orchestrator resolvable in the meantime.
+        // it here so endpoints can resolve it.
         services.AddScoped<WorkflowOrchestrator>();
         services.AddScoped<OrchestratorOptions>(sp =>
         {
@@ -32,62 +52,93 @@ public static class WorkflowEndpoints
                 .Bind(options);
             return options;
         });
-        services.AddScoped<IBudgetPreFlightCheck>(_ => new NoOpBudgetPreFlightCheck());
+
+        // Constructor-injected endpoint class: holds the root-able scope factory
+        // and the endpoint logger for the fire-and-forget background path.
+        services.AddSingleton<WorkflowEndpoints>();
         return services;
     }
 
-    public static IEndpointRouteBuilder MapWorkflowEndpoints(this IEndpointRouteBuilder app)
+    public IEndpointRouteBuilder MapWorkflowEndpoints(IEndpointRouteBuilder app)
     {
         // POST /api/workflows/citizen-response
         app.MapPost("/api/workflows/citizen-response", async (
             SubmitWorkflowRequest request,
-            IServiceProvider services,
+            HttpContext http,
             IConfiguration config,
-            ILogger<WorkflowOrchestrator> logger,
+            ICorrelationContext requestCorrelation,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(request.UserId) || string.IsNullOrWhiteSpace(request.Question))
+            if (string.IsNullOrWhiteSpace(request.Question))
             {
-                return Results.BadRequest(new { message = "UserId and Question are required." });
+                return Results.BadRequest(new { message = "Question is required." });
+            }
+
+            // The caller identity comes from the JWT "sub" claim, never from the
+            // request body, so a citizen cannot run a workflow as someone else.
+            var userId = GetUserId(http);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
             }
 
             var runId = Guid.NewGuid();
             var modelName = config["LlmSettings:DefaultModel"] ?? "gpt-4o-mini";
 
+            // Correlate the background run with the originating request so the
+            // orchestrator and every recorded step share the same correlation id.
+            var correlationId = requestCorrelation.CorrelationId;
+
             // TODO-D: Replace fire-and-forget with a durable queue (Checkpoint D).
-            // Current implementation risks task loss on app restart. Documented in
-            // SDD Part B gap table.
+            // Preferred production design: enqueue a work item on a Channel<T>
+            // drained by an IHostedService (BackgroundService) worker, decoupling
+            // run execution from the HTTP request so runs survive app restarts.
+            // Deferred here; the dedicated root-anchored scope below is the
+            // working MVP pattern. The worker approach is documented in the SDD
+            // Part B gap table.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    // Resolve in a dedicated scope: the request scope (and its
-                    // scoped EF DbContext) is disposed when the handler returns
-                    // its 202, which would break any long-running background work.
-                    using var scope = services.CreateScope();
+                    // Dedicated DI scope created from the root scope factory, not
+                    // from the request provider: request services are disposed
+                    // the moment this handler returns its 202, which would crash
+                    // a long-running background workflow with ObjectDisposed
+                    // Exception and lose the persisted run entirely.
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = correlationId;
                     var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
-                    await orchestrator.RunAsync(request.UserId, request.Question, modelName, CancellationToken.None, runId);
+                    await orchestrator.RunAsync(userId, request.Question, modelName, CancellationToken.None, runId);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Workflow {RunId} failed in background task", runId);
+                    _logger.LogError(ex, "Workflow {RunId} failed in background task", runId);
                 }
             });
 
             return Results.Accepted($"/api/runs/{runId}", new { runId });
         })
         .WithName("SubmitCitizenResponse")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         // GET /api/runs/{runId}
         app.MapGet("/api/runs/{runId:guid}", async (
             Guid runId,
+            HttpContext http,
             IWorkflowRunRepository runRepo,
             IAgentStepRepository stepRepo,
             CancellationToken ct) =>
         {
             var run = await runRepo.GetByIdAsync(runId, ct);
             if (run is null) return Results.NotFound(new { message = $"Run {runId} not found." });
+
+            // Ownership: citizens may only read their own runs; officers may
+            // read any run.
+            if (!IsOfficer(http) && !string.Equals(run.UserId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
 
             var steps = await stepRepo.GetForRunAsync(runId, ct);
 
@@ -97,6 +148,8 @@ public static class WorkflowEndpoints
                 StartedAtUtc: run.StartedAtUtc,
                 CompletedAtUtc: run.CompletedAtUtc,
                 TotalCostUsd: run.TotalCostUsd,
+                TotalTokensIn: steps.Sum(s => s.TokensIn ?? 0),
+                TotalTokensOut: steps.Sum(s => s.TokensOut ?? 0),
                 ErrorMessage: run.ErrorMessage,
                 Steps: steps.OrderBy(s => s.Order).Select(s => new StepResponse(
                     Order: s.Order,
@@ -113,21 +166,76 @@ public static class WorkflowEndpoints
             return Results.Ok(response);
         })
         .WithName("GetWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
+
+        // GET /api/runs/{runId}/trace
+        // Diagnostics view: the run's correlation ID plus its ordered agent-step
+        // history (timing, tokens, cost) for post-hoc audit replay.
+        app.MapGet("/api/runs/{runId:guid}/trace", async (
+            Guid runId,
+            HttpContext http,
+            IWorkflowRunRepository runRepo,
+            IAgentStepRepository stepRepo,
+            CancellationToken ct) =>
+        {
+            var run = await runRepo.GetByIdAsync(runId, ct);
+            if (run is null) return Results.NotFound(new { message = $"Run {runId} not found." });
+
+            // Same ownership semantics as the run view: citizens may trace only
+            // their own runs; officers any.
+            if (!IsOfficer(http) && !string.Equals(run.UserId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            var steps = await stepRepo.GetForRunAsync(runId, ct);
+
+            return Results.Ok(new
+            {
+                runId = run.Id,
+                correlationId = run.CorrelationId,
+                userId = run.UserId,
+                status = run.Status.ToString(),
+                startedAtUtc = run.StartedAtUtc,
+                completedAtUtc = run.CompletedAtUtc,
+                steps = steps.OrderBy(s => s.Order).Select(s => new
+                {
+                    order = s.Order,
+                    role = s.Role.ToString(),
+                    status = s.Status.ToString(),
+                    toolName = s.ToolName,
+                    durationMs = s.DurationMs,
+                    tokensIn = s.TokensIn,
+                    tokensOut = s.TokensOut,
+                    costUsd = s.CostUsd,
+                    outputSummary = s.OutputSummary,
+                    errorMessage = s.ErrorMessage
+                })
+            });
+        })
+        .WithName("GetWorkflowRunTrace")
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         // POST /api/runs/{runId}/approve
         app.MapPost("/api/runs/{runId}/approve", async (
             Guid runId,
-            ApprovalRequest request,
             HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            // The approver identity comes from the JWT "sub" claim, never from
+            // the request body, so a caller cannot forge who approved.
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
 
             try
             {
-                var audit = await approval.ApproveAsync(runId.ToString(), request.ApproverId, ct);
+                var audit = await approval.ApproveAsync(runId.ToString(), approverId, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (ApprovalAlreadyDecidedException ex)
@@ -140,7 +248,8 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("ApproveWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
 
         // POST /api/runs/{runId}/reject
         app.MapPost("/api/runs/{runId}/reject", async (
@@ -150,11 +259,15 @@ public static class WorkflowEndpoints
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
 
             try
             {
-                var audit = await approval.RejectAsync(runId.ToString(), request.ApproverId, request.Reason, ct);
+                var audit = await approval.RejectAsync(runId.ToString(), approverId, request.Reason, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (ApprovalAlreadyDecidedException ex)
@@ -167,7 +280,8 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("RejectWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
 
         // POST /api/runs/{runId}/edit-and-approve
         app.MapPost("/api/runs/{runId}/edit-and-approve", async (
@@ -177,12 +291,16 @@ public static class WorkflowEndpoints
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
 
             try
             {
                 var audit = await approval.EditAndApproveAsync(
-                    runId.ToString(), request.ApproverId, request.EditedDraftJson, request.Reason, ct);
+                    runId.ToString(), approverId, request.EditedDraftJson, request.Reason, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (InvalidEditedContentException ex)
@@ -199,19 +317,165 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("EditAndApproveWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
+
+        // GET /api/users/{userId}/spend
+        app.MapGet("/api/users/{userId}/spend", async (
+            string userId,
+            HttpContext http,
+            IUserBudgetRepository budgetRepo,
+            IWorkflowRunRepository runRepo,
+            IAgentStepRepository stepRepo,
+            CancellationToken ct) =>
+        {
+            // Ownership: citizens may only view their own spend; officers may
+            // view any user's spend.
+            if (!IsOfficer(http) && !string.Equals(userId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            var budget = await budgetRepo.GetByUserIdAsync(userId, ct);
+            if (budget is null)
+            {
+                return Results.NotFound(new { message = $"No budget record for user '{userId}'." });
+            }
+
+            // Aggregated token/cost accounting from the user's persisted steps.
+            var tokensIn = 0;
+            var tokensOut = 0;
+            var costUsd = 0m;
+            var runs = await runRepo.GetByUserIdAsync(userId, ct);
+            foreach (var run in runs)
+            {
+                var steps = await stepRepo.GetForRunAsync(run.Id, ct);
+                tokensIn += steps.Sum(s => s.TokensIn ?? 0);
+                tokensOut += steps.Sum(s => s.TokensOut ?? 0);
+                costUsd += steps.Sum(s => s.CostUsd);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var periodStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, DateTimeOffset.UtcNow.Offset);
+            var periodEnd = periodStart.AddMonths(1);
+
+            return Results.Ok(new SpendViewResponse(
+                UserId: userId,
+                TokensIn: tokensIn,
+                TokensOut: tokensOut,
+                CostUsd: costUsd,
+                BudgetLimitUsd: budget.AllocatedBudgetUsd,
+                BudgetRemainingUsd: budget.AllocatedBudgetUsd - budget.SpentUsd,
+                PeriodStartUtc: periodStart,
+                PeriodEndUtc: periodEnd));
+        })
+        .WithName("GetUserSpend")
+        .WithTags("Workflows")
+        .RequireAuthorization();
+
+        // GET /api/workflows/stream?question={question}
+        // Server-Sent Events: streams "stage"/"step"/"done"/"error" progress events
+        // for a run executed on the request path. A client disconnect aborts the
+        // run (requestAborted propagates into the orchestrator). The caller
+        // identity comes from the JWT "sub" claim, not a query parameter.
+        app.MapGet("/api/workflows/stream", async (
+            string question,
+            IServiceProvider services,
+            IConfiguration config,
+            ICorrelationContext requestCorrelation,
+            HttpContext http,
+            ILogger<WorkflowOrchestrator> logger,
+            CancellationToken ct) =>
+        {
+            var userId = GetUserId(http);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                return Results.BadRequest(new { message = "Question is required." });
+            }
+
+            var response = http.Response;
+            response.ContentType = "text/event-stream";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers.Connection = "keep-alive";
+            await response.StartAsync(ct);
+
+            var modelName = config["LlmSettings:DefaultModel"] ?? "gpt-4o-mini";
+
+            // Unbounded channel: events are few and small; writers must never
+            // deadlock the orchestrator behind a slow or disconnected client.
+            var channel = Channel.CreateUnbounded<WorkflowEvent>(new UnboundedChannelOptions { SingleReader = true });
+            var sink = new ChannelWorkflowProgressSink(channel);
+
+            var runTask = Task.Run(async () =>
+            {
+                try
+                {
+                    // Dedicated scope mirrors the background path so the scoped
+                    // DbContext outlives this request handler's stream pump.
+                    using var scope = services.CreateScope();
+                    scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = requestCorrelation.CorrelationId;
+                    var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
+                    await orchestrator.RunAsync(userId, question, modelName, ct, progress: sink);
+                }
+                finally
+                {
+                    sink.Complete();
+                }
+            }, CancellationToken.None);
+
+            try
+            {
+                await foreach (var evt in channel.Reader.ReadAllAsync(ct))
+                {
+                    var payload = JsonSerializer.Serialize(evt, JsonSerializerOptions.Web);
+                    await response.WriteAsync("data: " + payload + "\n\n", Encoding.UTF8, ct);
+                    await response.Body.FlushAsync(ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Client disconnected; the run aborts through the same token.
+            }
+            finally
+            {
+                // Observe run task failures so they surface as logged errors
+                // rather than unobserved-task-exceptions.
+                try
+                {
+                    await runTask;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Workflow stream run {UserId} failed after disconnect", userId);
+                }
+            }
+
+            return Results.Empty;
+        })
+        .WithName("StreamWorkflowProgress")
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         return app;
     }
 
     private static bool IsOfficer(HttpContext http) =>
-        http.Request.Headers.TryGetValue("X-Role", out var role) &&
-        string.Equals(role.ToString(), OfficerRole, StringComparison.OrdinalIgnoreCase);
+        http.User.IsInRole("Officer");
 
-    private sealed class NoOpBudgetPreFlightCheck : IBudgetPreFlightCheck
-    {
-        public Task ThrowIfExceededAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
-    }
+    private static string? GetUserId(HttpContext http) =>
+        // The caller identity is the JWT "sub" (subject) claim. ASP.NET's default
+        // inbound claim mapping surfaces OIDC "sub" as ClaimTypes.NameIdentifier,
+        // so fall back to the mapped type when the raw "sub" claim was remapped.
+        http.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+        ?? http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
     private static ApprovalResponse ToApprovalResponse(ApprovalAudit a) => new(
         Id: a.Id,

@@ -9,6 +9,7 @@ using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.ValueObjects;
 using CitizenServicesCopilot.Domain.Workflows;
+using Microsoft.Extensions.Logging;
 using Citation = CitizenServicesCopilot.Domain.ValueObjects.Citation;
 
 namespace CitizenServicesCopilot.Application.Agents;
@@ -17,6 +18,8 @@ public class ResponseDrafterAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
     private readonly IPromptProvider _promptProvider;
+    private readonly ICorrelationContext _correlation;
+    private readonly ILogger<ResponseDrafterAgent> _logger;
 
     public const string StandardRefusalPhrase = "Not enough information in the corpus";
 
@@ -28,10 +31,16 @@ public class ResponseDrafterAgent : IAgent
         ToolCatalog.ComputeFee
     };
 
-    public ResponseDrafterAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
+    public ResponseDrafterAgent(
+        ILLMProvider llmProvider,
+        IPromptProvider promptProvider,
+        ICorrelationContext correlation,
+        ILogger<ResponseDrafterAgent> logger)
     {
         _llmProvider = llmProvider;
         _promptProvider = promptProvider;
+        _correlation = correlation;
+        _logger = logger;
     }
 
     public async Task<(InquiryDraft Draft, int TokensUsed)> DraftResponseAsync(
@@ -144,7 +153,11 @@ public class ResponseDrafterAgent : IAgent
                 MaxTokens: 800
             );
 
-            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            LlmResponse response;
+            using (_logger.BeginScope(new { CorrelationId = _correlation.CorrelationId }))
+            {
+                response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            }
 
             var draft = BuildDraft(
                 response.Content.Trim(),
@@ -160,7 +173,10 @@ public class ResponseDrafterAgent : IAgent
                 Status: AgentStepStatus.Succeeded,
                 CreatedAtUtc: startedAt,
                 OutputSummary: draftJson,
-                TokensOut: draft.TokensUsed);
+                TokensIn: response.PromptTokens > 0 ? response.PromptTokens : null,
+                TokensOut: response.CompletionTokens > 0 ? response.CompletionTokens : null,
+                CostUsd: CostEstimator.CalculateActualCost(
+                    CostEstimator.IsCheapModel(input.ModelName), response.PromptTokens, response.CompletionTokens));
         }
         catch (OperationCanceledException)
         {

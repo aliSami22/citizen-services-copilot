@@ -137,6 +137,7 @@ public class AppDbContext : DbContext
             b.Property(r => r.UserId).IsRequired().HasMaxLength(100);
             b.Property(r => r.Status).HasConversion<string>().HasMaxLength(50);
             b.Property(r => r.TotalCostUsd).HasPrecision(18, 6);
+            b.Property(r => r.CorrelationId);
         });
 
         modelBuilder.Entity<AgentStep>(b =>
@@ -148,11 +149,13 @@ public class AppDbContext : DbContext
             b.Property(s => s.InputSummary).HasColumnType("text");
             b.Property(s => s.OutputSummary).HasColumnType("text");
             b.Property(s => s.CostUsd).HasPrecision(18, 6);
+            b.Property(s => s.CorrelationId);
             b.HasOne<WorkflowRun>()
                 .WithMany()
                 .HasForeignKey(s => s.RunId)
                 .OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(s => new { s.RunId, s.Order });
+            b.HasIndex(s => s.CorrelationId);
         });
 
         modelBuilder.Entity<ApprovalAudit>(b =>

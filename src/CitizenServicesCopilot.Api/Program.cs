@@ -1,22 +1,75 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using CitizenServicesCopilot.Api.DTOs;
 using CitizenServicesCopilot.Api.Endpoints;
+using CitizenServicesCopilot.Api.Middleware;
 using CitizenServicesCopilot.Application;
 using CitizenServicesCopilot.Application.Common.Exceptions;
 using CitizenServicesCopilot.Application.Orchestration;
 using CitizenServicesCopilot.Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using CitizenServicesCopilot.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
-builder.Services.AddWorkflowServices();
+WorkflowEndpoints.AddWorkflowServices(builder.Services);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
+// JWT bearer authentication. The signing key must be 256 bits (32 bytes) or
+// longer. In Development it comes from appsettings.Development.json / user
+// secrets; production must override Jwt:Key via the JWT__KEY environment
+// variable or a secret store. Never ship a real key in appsettings.json.
+// Options are wired lazily (first request) so signer and validator always read
+// the same resolved configuration and key rotation is a restart-free exercise.
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer();
+
+builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+{
+    var jwt = builder.Configuration.GetSection("Jwt");
+    var key = jwt["Key"];
+    if (string.IsNullOrWhiteSpace(key) || Encoding.UTF8.GetByteCount(key) < 32)
+    {
+        throw new InvalidOperationException(
+            "Jwt:Key is missing or shorter than 32 bytes. Configure it via user secrets " +
+            "(dotnet user-secrets set Jwt:Key \"...\"), appsettings, or the JWT__KEY environment variable.");
+    }
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = jwt["Issuer"],
+        ValidateAudience = true,
+        ValidAudience = jwt["Audience"],
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(1),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
+    };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    // Officer role gates the human-review and spend endpoints. Citizens are any
+    // authenticated user (ownership is enforced per-endpoint).
+    options.AddPolicy("Officer", policy =>
+        policy.RequireAuthenticatedUser().RequireRole("Officer"));
+});
+
 var app = builder.Build();
+
+// Propagate the correlation ID from the request header (or a fresh Guid) into
+// the scoped ICorrelationContext used by the orchestrator and agents.
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -109,7 +162,32 @@ app.MapPost("/api/documents/text", async (
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
 
-app.MapWorkflowEndpoints();
+// Liveness probe: the process is up. Always 200 when the handler is reachable.
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestampUtc = DateTimeOffset.UtcNow }))
+    .WithTags("Ops");
+
+// Readiness probe: 200 when the backing store responds, 503 otherwise. Used by
+// orchestrators to take the instance out of rotation during a dependency outage.
+app.MapGet("/ready", async (AppDbContext db, CancellationToken ct) =>
+    {
+        bool ready;
+        try
+        {
+            ready = await db.Database.CanConnectAsync(ct);
+        }
+        catch
+        {
+            ready = false;
+        }
+
+        return ready
+            ? Results.Ok(new { status = "Ready", timestampUtc = DateTimeOffset.UtcNow })
+            : Results.Json(new { status = "Unavailable", timestampUtc = DateTimeOffset.UtcNow }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    })
+    .WithTags("Ops");
+
+app.Services.GetRequiredService<WorkflowEndpoints>().MapWorkflowEndpoints(app);
+app.MapAuthEndpoints(builder.Configuration);
 
 app.Run();
 

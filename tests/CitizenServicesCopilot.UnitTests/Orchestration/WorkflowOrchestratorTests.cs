@@ -2,6 +2,7 @@ using System.Text.Json;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Orchestration;
+using CitizenServicesCopilot.Application.Services;
 using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
@@ -266,6 +267,126 @@ public class WorkflowOrchestratorTests
         Assert.Contains("search_corpus", ex.Message);
     }
 
+    [Fact]
+    public async Task BudgetDenied_OnFirstCheck_FailsRunWithBudgetExceeded()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null),
+            budgetCheck: new ScriptedPreFlight(_ => BudgetCheckResult.Denied));
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal("budget exceeded", run.ErrorMessage);
+        Assert.Empty(steps.All);
+    }
+
+    [Fact]
+    public async Task BudgetDenied_MidRun_FailsRunWithBudgetExceeded()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        // First gate (before the first agent) allows; the gate between stages denies.
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null),
+            budgetCheck: new ScriptedPreFlight(call => call == 1 ? BudgetCheckResult.Allowed : BudgetCheckResult.Denied));
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal("budget exceeded", run.ErrorMessage);
+        var onlyStep = Assert.Single(steps.All);
+        Assert.Equal(AgentRole.EligibilityIdentifier, onlyStep.Role);
+    }
+
+    [Fact]
+    public async Task RunAsync_StampsCorrelationIdOnRunAndEveryStep()
+    {
+        var steps = new InMemorySteps();
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var correlationId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var orchestrator = new WorkflowOrchestrator(
+            agents,
+            retrieval,
+            runs,
+            steps,
+            approvals,
+            new StubToolExecutor(succeed: true),
+            new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
+            new AlwaysOkPreFlight(),
+            new StubModelRouter(),
+            new StubCorrelationContext { CorrelationId = correlationId },
+            new NullWorkflowProgressSink(),
+            new OrchestratorOptions(),
+            NullLogger<WorkflowOrchestrator>.Instance);
+
+        var run = await orchestrator.RunAsync("user-1", "How do I get a passport?", "test-model");
+
+        Assert.Equal(correlationId, run.CorrelationId);
+        Assert.Equal(correlationId, runs.Last!.CorrelationId);
+        Assert.NotEmpty(steps.All);
+        Assert.All(steps.All, s => Assert.Equal(correlationId, s.CorrelationId));
+    }
+
+    [Fact]
+    public async Task RunAsync_PublishesStageStepAndDoneEventsInOrder()
+    {
+        var steps = new InMemorySteps();
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var sink = new CapturingProgressSink();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, approvals, progressSink: sink);
+
+        var run = await orchestrator.RunAsync("user-1", "How do I get a passport?", "test-model");
+
+        Assert.Equal(RunStatus.Approved, run.Status);
+        Assert.Collection(sink.Events,
+            e => Assert.Equal("stage", e.Type),
+            e => Assert.Equal("stage", e.Type),
+            e => { Assert.Equal("step", e.Type); Assert.Equal("EligibilityIdentifier", e.Stage); },
+            e => Assert.Equal("stage", e.Type),
+            e => { Assert.Equal("step", e.Type); Assert.Equal("ProcedureResolver", e.Stage); },
+            e => Assert.Equal("stage", e.Type),
+            e => { Assert.Equal("step", e.Type); Assert.Equal("ResponseDrafter", e.Stage); },
+            e => Assert.Equal("stage", e.Type),
+            e => { Assert.Equal("step", e.Type); Assert.Equal("Persist", e.Stage); },
+            e => { Assert.Equal("done", e.Type); Assert.Equal("Approved", e.Status); });
+        Assert.All(sink.Events, e => Assert.Equal(run.Id, e.RunId));
+    }
+
+    [Fact]
+    public async Task FailAsync_PublishesErrorThenDoneEvents()
+    {
+        var steps = new InMemorySteps();
+        var approvals = new InMemoryApprovals((ApprovalAudit?)null);
+        var agents = new IAgent[] { FailingEligibility() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var sink = new CapturingProgressSink();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, approvals, progressSink: sink);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Contains(sink.Events, e => e.Type == "error" && e.Message?.StartsWith("degraded draft failed") == true);
+        Assert.Contains(sink.Events, e => e.Type == "done" && e.Status == "Failed");
+    }
+
     private static WorkflowOrchestrator BuildOrchestrator(
         IReadOnlyList<IAgent> agents,
         IRetrievalService retrieval,
@@ -274,7 +395,9 @@ public class WorkflowOrchestratorTests
         InMemoryApprovals approvals,
         IToolExecutor? toolExecutor = null,
         IToolRegistry? toolRegistry = null,
-        OrchestratorOptions? options = null)
+        IBudgetPreFlightCheck? budgetCheck = null,
+        OrchestratorOptions? options = null,
+        IWorkflowProgressSink? progressSink = null)
         => new(
             agents,
             retrieval,
@@ -283,7 +406,10 @@ public class WorkflowOrchestratorTests
             approvals,
             toolExecutor ?? new StubToolExecutor(succeed: true),
             toolRegistry ?? new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
-            new AlwaysOkPreFlight(),
+            budgetCheck ?? new AlwaysOkPreFlight(),
+            new StubModelRouter(),
+            new StubCorrelationContext(),
+            progressSink ?? new NullWorkflowProgressSink(),
             options ?? new OrchestratorOptions(),
             NullLogger<WorkflowOrchestrator>.Instance);
 
@@ -415,7 +541,45 @@ public class WorkflowOrchestratorTests
 
     private sealed class AlwaysOkPreFlight : IBudgetPreFlightCheck
     {
-        public Task ThrowIfExceededAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
+            => Task.FromResult(BudgetCheckResult.Allowed);
+    }
+
+    private sealed class ScriptedPreFlight : IBudgetPreFlightCheck
+    {
+        private readonly Func<int, BudgetCheckResult> _script;
+
+        public int Calls { get; private set; }
+
+        public ScriptedPreFlight(Func<int, BudgetCheckResult> script) => _script = script;
+
+        public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(_script(Calls));
+        }
+    }
+
+    private sealed class StubModelRouter : IModelRouter
+    {
+        public string SelectModel(AgentRole role)
+            => role == AgentRole.ResponseDrafter ? "premium" : "cheap";
+    }
+
+    private sealed class StubCorrelationContext : ICorrelationContext
+    {
+        public Guid CorrelationId { get; set; } = new("11111111-2222-3333-4444-555555555555");
+    }
+
+    private sealed class CapturingProgressSink : IWorkflowProgressSink
+    {
+        public List<WorkflowEvent> Events { get; } = new();
+
+        public Task PublishAsync(WorkflowEvent evt, CancellationToken ct = default)
+        {
+            Events.Add(evt);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class InMemoryRuns : IWorkflowRunRepository
@@ -426,6 +590,9 @@ public class WorkflowOrchestratorTests
 
         public Task<WorkflowRun?> GetByIdAsync(Guid runId, CancellationToken ct = default)
             => Task.FromResult(_store.TryGetValue(runId, out var run) ? run : null);
+
+        public Task<IReadOnlyList<WorkflowRun>> GetByUserIdAsync(string userId, CancellationToken ct = default)
+            => Task.FromResult((IReadOnlyList<WorkflowRun>)_store.Values.Where(r => r.UserId == userId).ToList());
 
         public Task AddAsync(WorkflowRun run, CancellationToken ct = default)
         {

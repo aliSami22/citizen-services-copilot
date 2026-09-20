@@ -2,10 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/CitizenServicesCopilot.Api/CitizenServicesCopilot.Api.csproj" />
     <Project Path="src/CitizenServicesCopilot.Application/CitizenServicesCopilot.Application.csproj" />
+    <Project Path="src/CitizenServicesCopilot.Cli/CitizenServicesCopilot.Cli.csproj" />
     <Project Path="src/CitizenServicesCopilot.Domain/CitizenServicesCopilot.Domain.csproj" />
     <Project Path="src/CitizenServicesCopilot.Infrastructure/CitizenServicesCopilot.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CitizenServicesCopilot.UnitTests/CitizenServicesCopilot.UnitTests.csproj" />
+    <Project Path="tests/CitizenServicesCopilot.Api.Tests/CitizenServicesCopilot.Api.Tests.csproj" />
   </Folder>
 </Solution>

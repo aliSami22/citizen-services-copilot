@@ -1,4 +1,5 @@
 using System.Text;
+using CitizenServicesCopilot.Application.Common;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Services.Prompts;
@@ -6,6 +7,7 @@ using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
+using Microsoft.Extensions.Logging;
 
 namespace CitizenServicesCopilot.Application.Agents;
 
@@ -13,15 +15,23 @@ public class ProcedureResolverAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
     private readonly IPromptProvider _promptProvider;
+    private readonly ICorrelationContext _correlation;
+    private readonly ILogger<ProcedureResolverAgent> _logger;
 
     public AgentRole Role => AgentRole.ProcedureResolver;
 
     public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string> { ToolCatalog.GetRegulationVersion };
 
-    public ProcedureResolverAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
+    public ProcedureResolverAgent(
+        ILLMProvider llmProvider,
+        IPromptProvider promptProvider,
+        ICorrelationContext correlation,
+        ILogger<ProcedureResolverAgent> logger)
     {
         _llmProvider = llmProvider;
         _promptProvider = promptProvider;
+        _correlation = correlation;
+        _logger = logger;
     }
 
     public async Task<(string RequiredDocs, string Steps, string FeesAndTimeline, int TokensUsed)> ResolveProcedureAsync(
@@ -106,7 +116,11 @@ public class ProcedureResolverAgent : IAgent
                 MaxTokens: 500
             );
 
-            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            LlmResponse response;
+            using (_logger.BeginScope(new { CorrelationId = _correlation.CorrelationId }))
+            {
+                response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            }
 
             var plan = new ProcedurePlan(
                 RequiredDocuments: response.Content.Trim(),
@@ -121,7 +135,10 @@ public class ProcedureResolverAgent : IAgent
                 Status: AgentStepStatus.Succeeded,
                 CreatedAtUtc: startedAt,
                 OutputSummary: summary,
-                TokensOut: plan.TokensUsed);
+                TokensIn: response.PromptTokens > 0 ? response.PromptTokens : null,
+                TokensOut: response.CompletionTokens > 0 ? response.CompletionTokens : null,
+                CostUsd: CostEstimator.CalculateActualCost(
+                    CostEstimator.IsCheapModel(input.ModelName), response.PromptTokens, response.CompletionTokens));
         }
         catch (OperationCanceledException)
         {

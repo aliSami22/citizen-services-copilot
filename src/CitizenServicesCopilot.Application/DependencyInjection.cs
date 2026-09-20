@@ -13,6 +13,18 @@ public static class DependencyInjection
         // Cost Governor Service
         services.AddScoped<ICostGovernor, CostGovernorService>();
 
+        // Budget gate (real implementation; no-op fallback when no record exists)
+        services.AddScoped<IBudgetPreFlightCheck, Services.BudgetPreFlightCheck>();
+
+        // Budget-aware model routing
+        services.AddScoped<IModelRouter, Services.ConfigurationModelRouter>();
+
+        // Correlation context (set by API middleware from X-Correlation-Id)
+        services.AddScoped<ICorrelationContext, Services.CorrelationContext>();
+
+        // Progress sink default: no-op unless a real-time consumer registers one.
+        services.AddScoped<IWorkflowProgressSink, Services.NullWorkflowProgressSink>();
+
         // Prompt provider (embedded resources) and specialized agents
         services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();

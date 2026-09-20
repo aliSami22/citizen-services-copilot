@@ -1,10 +1,12 @@
 using System.Text;
+using CitizenServicesCopilot.Application.Common;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
 using CitizenServicesCopilot.Application.Services.Prompts;
 using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
+using Microsoft.Extensions.Logging;
 
 namespace CitizenServicesCopilot.Application.Agents;
 
@@ -12,15 +14,23 @@ public class EligibilityIdentifierAgent : IAgent
 {
     private readonly ILLMProvider _llmProvider;
     private readonly IPromptProvider _promptProvider;
+    private readonly ICorrelationContext _correlation;
+    private readonly ILogger<EligibilityIdentifierAgent> _logger;
 
     public AgentRole Role => AgentRole.EligibilityIdentifier;
 
     public IReadOnlySet<string> AllowedTools { get; } = new HashSet<string>();
 
-    public EligibilityIdentifierAgent(ILLMProvider llmProvider, IPromptProvider promptProvider)
+    public EligibilityIdentifierAgent(
+        ILLMProvider llmProvider,
+        IPromptProvider promptProvider,
+        ICorrelationContext correlation,
+        ILogger<EligibilityIdentifierAgent> logger)
     {
         _llmProvider = llmProvider;
         _promptProvider = promptProvider;
+        _correlation = correlation;
+        _logger = logger;
     }
 
     public async Task<(string Summary, int TokensUsed)> IdentifyEligibilityAsync(
@@ -96,7 +106,11 @@ public class EligibilityIdentifierAgent : IAgent
                 MaxTokens: 400
             );
 
-            var response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            LlmResponse response;
+            using (_logger.BeginScope(new { CorrelationId = _correlation.CorrelationId }))
+            {
+                response = await _llmProvider.GenerateCompletionAsync(llmPrompt, ct);
+            }
 
             var result = new EligibilityResult(response.Content.Trim(), response.TotalTokens);
 
@@ -105,7 +119,10 @@ public class EligibilityIdentifierAgent : IAgent
                 Status: AgentStepStatus.Succeeded,
                 CreatedAtUtc: startedAt,
                 OutputSummary: result.Summary,
-                TokensOut: result.TokensUsed);
+                TokensIn: response.PromptTokens > 0 ? response.PromptTokens : null,
+                TokensOut: response.CompletionTokens > 0 ? response.CompletionTokens : null,
+                CostUsd: CostEstimator.CalculateActualCost(
+                    CostEstimator.IsCheapModel(input.ModelName), response.PromptTokens, response.CompletionTokens));
         }
         catch (OperationCanceledException)
         {

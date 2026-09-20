@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Threading.Channels;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
+using CitizenServicesCopilot.Application.Services;
 using CitizenServicesCopilot.Application.Services.Tools;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
@@ -21,6 +23,11 @@ public class WorkflowOrchestrator
 {
     public const string PersistDraftToolName = ToolCatalog.PersistDraft;
 
+    /// <summary>
+    /// Terminal failure reason recorded when the budget gate blocks a run.
+    /// </summary>
+    public const string BudgetExceededReason = "budget exceeded";
+
     private const string DegradationNote = "graceful degradation to plain RAG after agent chain failure";
     private const string InsufficientEvidence = "insufficient evidence";
 
@@ -32,11 +39,21 @@ public class WorkflowOrchestrator
     private readonly IToolExecutor _toolExecutor;
     private readonly IToolRegistry _toolRegistry;
     private readonly IBudgetPreFlightCheck _budgetCheck;
+    private readonly IModelRouter _modelRouter;
+    private readonly ICorrelationContext _correlation;
+    private readonly IWorkflowProgressSink _progressSink;
     private readonly OrchestratorOptions _options;
     private readonly ILogger<WorkflowOrchestrator> _logger;
 
     private int _stageAttemptCount;
     private int _stepOrder;
+
+    /// <summary>
+    /// Sink used for the currently executing run. Defaults to the injected
+    /// (scoped) sink; a caller may supply one per invocation via RunAsync.
+    /// The orchestrator resolves one run per instance, so a single buffer is safe.
+    /// </summary>
+    private IWorkflowProgressSink _activeProgress = NullWorkflowProgressSink.Instance;
 
     public WorkflowOrchestrator(
         IEnumerable<IAgent> agents,
@@ -47,6 +64,9 @@ public class WorkflowOrchestrator
         IToolExecutor toolExecutor,
         IToolRegistry toolRegistry,
         IBudgetPreFlightCheck budgetCheck,
+        IModelRouter modelRouter,
+        ICorrelationContext correlation,
+        IWorkflowProgressSink progressSink,
         OrchestratorOptions options,
         ILogger<WorkflowOrchestrator> logger)
     {
@@ -59,6 +79,9 @@ public class WorkflowOrchestrator
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _budgetCheck = budgetCheck ?? throw new ArgumentNullException(nameof(budgetCheck));
+        _modelRouter = modelRouter ?? throw new ArgumentNullException(nameof(modelRouter));
+        _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
+        _progressSink = progressSink ?? NullWorkflowProgressSink.Instance;
         _options = options ?? new OrchestratorOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -76,14 +99,19 @@ public class WorkflowOrchestrator
         }
     }
 
-    public async Task<WorkflowRun> RunAsync(string userId, string query, string modelName, CancellationToken ct = default, Guid? runId = null)
+    public async Task<WorkflowRun> RunAsync(
+        string userId,
+        string query,
+        string modelName,
+        CancellationToken ct = default,
+        Guid? runId = null,
+        IWorkflowProgressSink? progress = null)
     {
         ct.ThrowIfCancellationRequested();
 
-        // Budget pre-flight hook (concrete cost governor wired in Checkpoint C).
-        await _budgetCheck.ThrowIfExceededAsync(userId, ct);
+        _activeProgress = progress ?? _progressSink;
 
-        var run = WorkflowRun.Create(userId, runId);
+        var run = WorkflowRun.Create(userId, runId) with { CorrelationId = _correlation.CorrelationId };
         await _runs.AddAsync(run, ct);
         run = run with { Status = RunStatus.Running };
         await _runs.UpdateAsync(run, ct);
@@ -96,6 +124,7 @@ public class WorkflowOrchestrator
         try
         {
             // Stage 0 - grounded retrieval. §3 R-2: refuse when there is no evidence to ground a response.
+            await PublishEventAsync(new WorkflowEvent(WorkflowEventTypes.Stage, run.Id, Stage: "retrieval"), ct);
             var retrieval = await _retrievalService.RetrieveAsync(new RetrievalQuery(query), ct);
             if (retrieval.IsRefusal || retrieval.Chunks.Count == 0)
             {
@@ -104,14 +133,34 @@ public class WorkflowOrchestrator
 
             input = input with { ContextChunks = retrieval.Chunks.Select(c => c.Chunk).ToList() };
 
+            // Budget gate: evaluated before the first agent and between stages.
+            // Denied/WouldExceed terminates the run with a hard cut-off.
+            var budgetFail = await EnforceBudgetAsync(run, query, ct);
+            if (budgetFail is not null)
+            {
+                return budgetFail;
+            }
+
             AgentStep draftStep;
             try
             {
                 var eligibilityStep = await RunStageAsync(AgentRole.EligibilityIdentifier, input, ct);
                 recordedSteps.Add(eligibilityStep);
 
+                budgetFail = await EnforceBudgetAsync(run, query, ct);
+                if (budgetFail is not null)
+                {
+                    return budgetFail;
+                }
+
                 var procedureStep = await RunStageAsync(AgentRole.ProcedureResolver, input, ct);
                 recordedSteps.Add(procedureStep);
+
+                budgetFail = await EnforceBudgetAsync(run, query, ct);
+                if (budgetFail is not null)
+                {
+                    return budgetFail;
+                }
 
                 draftStep = await RunStageAsync(AgentRole.ResponseDrafter, input, ct);
                 recordedSteps.Add(draftStep);
@@ -253,7 +302,7 @@ public class WorkflowOrchestrator
             OutputSummary: DegradationNote);
         degradedStep = PrepareForPersistence(degradedStep, run.Id);
         recordedSteps.Add(degradedStep);
-        await _steps.AddAsync(degradedStep, ct);
+        await PersistStepAsync(degradedStep, ct);
 
         // Degradation re-runs retrieval so the fallback re-applies the evidence gate.
         var retrieval = await _retrievalService.RetrieveAsync(new RetrievalQuery(input.Query), ct);
@@ -296,6 +345,8 @@ public class WorkflowOrchestrator
             throw new AgentStageFailureException(role, $"no agent registered for role '{role}'");
         }
 
+        await PublishEventAsync(new WorkflowEvent(WorkflowEventTypes.Stage, input.RunId, Stage: role.ToString()), ct);
+
         var attempt = 0;
         AgentStep? lastStep = null;
 
@@ -312,8 +363,10 @@ public class WorkflowOrchestrator
             var startedAt = DateTimeOffset.UtcNow;
             try
             {
+                // Route the per-stage model: cheap for eligibility/procedure, premium for drafting.
+                var routedInput = input with { ModelName = _modelRouter.SelectModel(role) };
                 lastStep = await agent
-                    .ExecuteAsync(input, ct)
+                    .ExecuteAsync(routedInput, ct)
                     .WaitAsync(_options.StepTimeout, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -342,7 +395,7 @@ public class WorkflowOrchestrator
             }
 
             lastStep = PrepareForPersistence(lastStep, input.RunId);
-            await _steps.AddAsync(lastStep, ct);
+            await PersistStepAsync(lastStep, ct);
 
             if (lastStep.Status == AgentStepStatus.Succeeded)
             {
@@ -368,6 +421,8 @@ public class WorkflowOrchestrator
     {
         var startedAt = DateTimeOffset.UtcNow;
 
+        await PublishEventAsync(new WorkflowEvent(WorkflowEventTypes.Stage, runId, Stage: "persist"), ct);
+
         // The write-gated persist tool must exist and be flagged as a write.
         if (!_toolRegistry.TryGet(PersistDraftToolName, out var persistTool))
         {
@@ -377,7 +432,7 @@ public class WorkflowOrchestrator
                 CreatedAtUtc: startedAt,
                 OutputSummary: null,
                 ErrorMessage: $"write tool '{PersistDraftToolName}' is not registered"), runId);
-            await _steps.AddAsync(missing, ct);
+            await PersistStepAsync(missing, ct);
             return missing;
         }
 
@@ -389,7 +444,7 @@ public class WorkflowOrchestrator
                 CreatedAtUtc: startedAt,
                 OutputSummary: null,
                 ErrorMessage: $"tool '{PersistDraftToolName}' is not flagged as a write tool"), runId);
-            await _steps.AddAsync(notWrite, ct);
+            await PersistStepAsync(notWrite, ct);
             return notWrite;
         }
 
@@ -409,7 +464,7 @@ public class WorkflowOrchestrator
                 OutputSummary: null,
                 ErrorMessage: result.Error ?? "persist_draft failed"), runId);
 
-        await _steps.AddAsync(step, ct);
+        await PersistStepAsync(step, ct);
         return step;
     }
 
@@ -421,12 +476,55 @@ public class WorkflowOrchestrator
     {
         Id = step.Id == Guid.Empty ? Guid.NewGuid() : step.Id,
         RunId = runId,
-        Order = _stepOrder++
+        Order = _stepOrder++,
+        CorrelationId = _correlation.CorrelationId
     };
+
+    /// <summary>
+    /// Persists a step and publishes a matching "step" progress event.
+    /// </summary>
+    private async Task PersistStepAsync(AgentStep step, CancellationToken ct)
+    {
+        await _steps.AddAsync(step, ct);
+        await PublishEventAsync(new WorkflowEvent(
+            WorkflowEventTypes.Step,
+            step.RunId,
+            Stage: step.Role.ToString(),
+            Status: step.Status.ToString(),
+            Order: step.Order,
+            Message: step.ErrorMessage ?? step.OutputSummary), ct);
+    }
+
+    /// <summary>
+    /// Budget gate with a hard cut-off: Denied (hard-blocked) or WouldExceed
+    /// terminates the run with <see cref="BudgetExceededReason"/>. Returns null
+    /// when the run may proceed.
+    /// </summary>
+    private async Task<WorkflowRun?> EnforceBudgetAsync(WorkflowRun run, string query, CancellationToken ct)
+    {
+        var result = await _budgetCheck.CheckAsync(run.UserId, EstimateTokens(query), ct);
+        if (result == BudgetCheckResult.Allowed)
+        {
+            return null;
+        }
+
+        return await FailAsync(run, BudgetExceededReason, ct);
+    }
+
+    /// <summary>
+    /// Rough token estimate for a stage/run: ~1 token per 4 chars plus a fixed
+    /// context overhead. One conservative estimate is reused for every gate.
+    /// </summary>
+    private static int EstimateTokens(string query) =>
+        Math.Max(1000, (query.Length / 4) + 700);
 
     private async Task<WorkflowRun> FailAsync(WorkflowRun run, string reason, CancellationToken ct)
     {
         _logger.LogWarning("Workflow run {RunId} failed: {Reason}", run.Id, reason);
+
+        await PublishEventAsync(new WorkflowEvent(
+            WorkflowEventTypes.Error, run.Id, Message: reason), ct);
+
         run = run with { ErrorMessage = reason };
         return await FinishAsync(run, RunStatus.Failed, ct);
     }
@@ -435,7 +533,31 @@ public class WorkflowOrchestrator
     {
         run = run with { Status = terminal, CompletedAtUtc = DateTimeOffset.UtcNow };
         await _runs.UpdateAsync(run, ct);
+
+        await PublishEventAsync(new WorkflowEvent(
+            WorkflowEventTypes.Done,
+            run.Id,
+            Status: terminal.ToString(),
+            Message: run.ErrorMessage), ct);
+
         return run;
+    }
+
+    /// <summary>
+    /// Best-effort progress publishing: a dead stream (client disconnect) or a
+    /// closed channel must never fail the run itself. Cancellation of the run
+    /// is driven by <paramref name="ct"/> on the real work, not on publishing.
+    /// </summary>
+    private async Task PublishEventAsync(WorkflowEvent evt, CancellationToken ct)
+    {
+        try
+        {
+            await _activeProgress.PublishAsync(evt, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ChannelClosedException)
+        {
+            _logger.LogTrace("Progress event {EventType} dropped: {Reason}", evt.Type, ex.Message);
+        }
     }
 
     private static (bool IsRefusal, string? Reason) ReadDraftRefusal(string draftJson)

@@ -360,13 +360,60 @@ Duplicate submissions return `200 OK` with `isDuplicate: true`. Failed ingestion
 
 Budget exceeded returns `402 Payment Required`.
 
+### `GET /api/runs/{runId}`, `GET /api/users/{userId}/spend`
+
+> Added in **Checkpoint D** (auth) and **PR #11** (workflow). Requires a bearer
+> token; citizens may access only their own resources, officers any.
+
+- `GET /api/runs/{runId}` → run summary with the persisted `steps` array.
+- `GET /api/users/{userId}/spend` → aggregated token/cost accounting for a user
+  (summed from persisted agent steps).
+
+### `GET /api/runs/{runId}/trace`
+
+> Added in **Checkpoint D** (diagnostics). Same ownership policy as the run
+> view. Returns the full audit trail of one workflow run, including the
+> request correlation id and per-step timing/token/cost breakdown:
+
+```json
+{
+  "runId": "guid",
+  "correlationId": "guid",
+  "status": "Failed",
+  "startedAtUtc": "...",
+  "completedAtUtc": "...",
+  "steps": [
+    {
+      "order": 0,
+      "role": "EligibilityIdentifier",
+      "status": "Succeeded",
+      "toolName": "GroundedRetriever",
+      "durationMs": 812,
+      "tokensIn": 120,
+      "tokensOut": 40,
+      "costUsd": 0.00006,
+      "outputSummary": "...",
+      "errorMessage": null
+    }
+  ]
+}
+```
+
+### `GET /health`, `GET /ready`
+
+> Added in **Checkpoint D** (observability).
+
+- `GET /health` → liveness, always `200 {"status": "Healthy", ...}`.
+- `GET /ready` → readiness, probes the EF store with `CanConnectAsync`;
+  `200 {"status": "Ready", ...}` when reachable, `503` otherwise.
+
 ## Running Tests
 
 ```bash
 dotnet test
 ```
 
-**Current status:** 70 tests passing (0 failed, 0 skipped).
+**Current status:** 191 tests passing (0 failed, 0 skipped).
 
 Test coverage areas:
 - Document ingestion service (idempotency, chunking, failure handling)
@@ -430,11 +477,39 @@ Alternative — change the port in
 
 > Added in **Checkpoint D** (authentication & authorization).
 
-No demo accounts are seeded in the current codebase. The app has no
-authentication or authorization on any endpoint yet (see Current Limitations);
-user identity is passed in the request body (`userId` on
-`POST /api/inquiries`). Demo credentials, roles (`Citizen`, `Officer`), and
-budget seeding will be documented here when auth lands in Checkpoint D.
+Authentication is JWT bearer. Obtain a token with
+`POST /api/auth/login` and a JSON body `{ "userId": "...", "role": "Citizen" | "Officer" }`,
+then send it as `Authorization: Bearer <token>`. No user store is seeded: any
+`userId` may log in under a role (the demo has no registration).
+
+Roles and endpoint access:
+
+| Endpoint | Policy |
+| --- | --- |
+| `POST /api/auth/login` | anonymous |
+| `POST /api/workflows/citizen-response`, `GET /api/workflows/stream` | anonymous |
+| `GET /api/runs/{runId}`, `GET /api/runs/{runId}/trace` | any authenticated user; citizens only their own runs, officers any |
+| `GET /api/users/{userId}/spend` | any authenticated user; citizens only their own spend, officers any |
+| `POST /api/runs/{runId}/approve`, `/reject`, `/edit-and-approve` | `Officer` role only |
+
+The signing key comes from `Jwt:Key` (Development: `appsettings.Development.json`
+or `dotnet user-secrets set Jwt:Key "..."`; production: `JWT__KEY` env var or a
+secret store). It must be at least 32 bytes.
+
+## Citizen Workflow CLI
+
+> Added in **Checkpoint D**. A dependency-free console client that drives the
+> API end-to-end: logs in as a citizen, submits a question, then polls the run
+> trace until it terminates and prints it.
+
+```bash
+dotnet run --project src/CitizenServicesCopilot.Cli -- [baseUrl] [userId] [question]
+# e.g.  dotnet run --project src/CitizenServicesCopilot.Cli -- http://localhost:5177 citizen-1 "Passport procedure?"
+```
+
+`baseUrl` defaults to `http://localhost:5177`, `userId` to `cli-user`; if the
+question is omitted it is prompted on stdin. Exit code `0` for `Approved`/
+`Rejected`, `1` otherwise (including `Failed`/`Cancelled`).
 
 ## 5-Minute Demo Path
 
@@ -448,7 +523,7 @@ budget seeding will be documented here when auth lands in Checkpoint D.
 6. **Re-submit the same document** → observe `isDuplicate: true` (SHA-256 idempotency)
 7. **Ask a grounded question** via `POST /api/inquiries` with a question matching the ingested content
 8. **Ask an unrelated question** → observe the grounded refusal response (`isRefusal: true`)
-9. **Run the test suite:** `dotnet test` → 70/70 passing
+9. **Run the test suite:** `dotnet test` → 191/191 passing
 
 ## Current Limitations & Deferred Work
 
