@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using CitizenServicesCopilot.Domain.Agents;
 using CitizenServicesCopilot.Domain.Entities;
 using CitizenServicesCopilot.Domain.Workflows;
 using CitizenServicesCopilot.Infrastructure.Persistence;
@@ -18,9 +19,11 @@ namespace CitizenServicesCopilot.Api.Tests;
 public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
 {
     private readonly HttpClient _client;
+    private readonly WorkflowApiFactory _factory;
 
     public WorkflowEndpointTests(WorkflowApiFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -113,6 +116,72 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         req.Content = JsonContent.Create(new { approverId = "officer-1" });
         var resp = await _client.SendAsync(req);
         Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_Spend_NoBudgetRecord_Returns404()
+    {
+        var resp = await _client.GetAsync($"/api/users/{Guid.NewGuid():N}/spend");
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_Spend_AfterRun_ReturnsAggregatedValues()
+    {
+        var userId = $"u-spend-{Guid.NewGuid():N}";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.UserBudgets.Add(new UserBudget
+            {
+                UserId = userId,
+                AllocatedBudgetUsd = 10m,
+                SpentUsd = 0m,
+                TotalTokensUsed = 0,
+                IsBlocked = false
+            });
+
+            var run = WorkflowRun.Create(userId);
+            db.WorkflowRuns.Add(run);
+            await db.SaveChangesAsync();
+
+            db.AgentSteps.AddRange(
+                new AgentStep(
+                    Role: AgentRole.EligibilityIdentifier,
+                    Status: AgentStepStatus.Succeeded,
+                    CreatedAtUtc: DateTimeOffset.UtcNow,
+                    OutputSummary: "eligible",
+                    TokensIn: 100,
+                    TokensOut: 50,
+                    CostUsd: 0.001m,
+                    RunId: run.Id,
+                    Order: 0),
+                new AgentStep(
+                    Role: AgentRole.ResponseDrafter,
+                    Status: AgentStepStatus.Succeeded,
+                    CreatedAtUtc: DateTimeOffset.UtcNow,
+                    OutputSummary: "draft",
+                    TokensIn: 200,
+                    TokensOut: 80,
+                    CostUsd: 0.002m,
+                    RunId: run.Id,
+                    Order: 1));
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await _client.GetAsync($"/api/users/{userId}/spend");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(userId, body.GetProperty("userId").GetString());
+        Assert.Equal(300, body.GetProperty("tokensIn").GetInt32());
+        Assert.Equal(130, body.GetProperty("tokensOut").GetInt32());
+        Assert.Equal(0.003m, body.GetProperty("costUsd").GetDecimal());
+        Assert.Equal(10m, body.GetProperty("budgetLimitUsd").GetDecimal());
+        Assert.Equal(10m, body.GetProperty("budgetRemainingUsd").GetDecimal());
+        Assert.True(body.TryGetProperty("periodStartUtc", out _));
+        Assert.True(body.TryGetProperty("periodEndUtc", out _));
     }
 }
 

@@ -266,6 +266,44 @@ public class WorkflowOrchestratorTests
         Assert.Contains("search_corpus", ex.Message);
     }
 
+    [Fact]
+    public async Task BudgetDenied_OnFirstCheck_FailsRunWithBudgetExceeded()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null),
+            budgetCheck: new ScriptedPreFlight(_ => BudgetCheckResult.Denied));
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal("budget exceeded", run.ErrorMessage);
+        Assert.Empty(steps.All);
+    }
+
+    [Fact]
+    public async Task BudgetDenied_MidRun_FailsRunWithBudgetExceeded()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        // First gate (before the first agent) allows; the gate between stages denies.
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null),
+            budgetCheck: new ScriptedPreFlight(call => call == 1 ? BudgetCheckResult.Allowed : BudgetCheckResult.Denied));
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal("budget exceeded", run.ErrorMessage);
+        var onlyStep = Assert.Single(steps.All);
+        Assert.Equal(AgentRole.EligibilityIdentifier, onlyStep.Role);
+    }
+
     private static WorkflowOrchestrator BuildOrchestrator(
         IReadOnlyList<IAgent> agents,
         IRetrievalService retrieval,
@@ -274,6 +312,7 @@ public class WorkflowOrchestratorTests
         InMemoryApprovals approvals,
         IToolExecutor? toolExecutor = null,
         IToolRegistry? toolRegistry = null,
+        IBudgetPreFlightCheck? budgetCheck = null,
         OrchestratorOptions? options = null)
         => new(
             agents,
@@ -283,7 +322,7 @@ public class WorkflowOrchestratorTests
             approvals,
             toolExecutor ?? new StubToolExecutor(succeed: true),
             toolRegistry ?? new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
-            new AlwaysOkPreFlight(),
+            budgetCheck ?? new AlwaysOkPreFlight(),
             new StubModelRouter(),
             options ?? new OrchestratorOptions(),
             NullLogger<WorkflowOrchestrator>.Instance);
@@ -418,6 +457,21 @@ public class WorkflowOrchestratorTests
     {
         public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
             => Task.FromResult(BudgetCheckResult.Allowed);
+    }
+
+    private sealed class ScriptedPreFlight : IBudgetPreFlightCheck
+    {
+        private readonly Func<int, BudgetCheckResult> _script;
+
+        public int Calls { get; private set; }
+
+        public ScriptedPreFlight(Func<int, BudgetCheckResult> script) => _script = script;
+
+        public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(_script(Calls));
+        }
     }
 
     private sealed class StubModelRouter : IModelRouter
