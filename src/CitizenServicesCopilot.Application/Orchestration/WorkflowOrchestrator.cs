@@ -37,6 +37,7 @@ public class WorkflowOrchestrator
     private readonly IToolExecutor _toolExecutor;
     private readonly IToolRegistry _toolRegistry;
     private readonly IBudgetPreFlightCheck _budgetCheck;
+    private readonly IModelRouter _modelRouter;
     private readonly OrchestratorOptions _options;
     private readonly ILogger<WorkflowOrchestrator> _logger;
 
@@ -52,6 +53,7 @@ public class WorkflowOrchestrator
         IToolExecutor toolExecutor,
         IToolRegistry toolRegistry,
         IBudgetPreFlightCheck budgetCheck,
+        IModelRouter modelRouter,
         OrchestratorOptions options,
         ILogger<WorkflowOrchestrator> logger)
     {
@@ -64,6 +66,7 @@ public class WorkflowOrchestrator
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _budgetCheck = budgetCheck ?? throw new ArgumentNullException(nameof(budgetCheck));
+        _modelRouter = modelRouter ?? throw new ArgumentNullException(nameof(modelRouter));
         _options = options ?? new OrchestratorOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -334,8 +337,10 @@ public class WorkflowOrchestrator
             var startedAt = DateTimeOffset.UtcNow;
             try
             {
+                // Route the per-stage model: cheap for eligibility/procedure, premium for drafting.
+                var routedInput = input with { ModelName = _modelRouter.SelectModel(role) };
                 lastStep = await agent
-                    .ExecuteAsync(input, ct)
+                    .ExecuteAsync(routedInput, ct)
                     .WaitAsync(_options.StepTimeout, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)

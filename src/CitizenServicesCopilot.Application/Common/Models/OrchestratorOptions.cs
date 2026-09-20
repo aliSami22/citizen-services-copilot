@@ -8,6 +8,12 @@ public sealed class OrchestratorOptions
     public const string SectionName = "Orchestrator";
 
     /// <summary>
+    /// Model-tier routing read by <c>ConfigurationModelRouter</c>
+    /// (keys: <c>Routing:CheapModel</c>, <c>Routing:PremiumModel</c>).
+    /// </summary>
+    public RoutingOptions Routing { get; set; } = new();
+
+    /// <summary>
     /// Hard cap on agent attempts across a single run (attempts include retries).
     /// Guards against unbounded loops; trip results in a Failed terminal state.
     /// </summary>
@@ -46,4 +52,20 @@ public sealed class OrchestratorOptions
     /// decision; on expiry the run is marked Failed with "approval timeout".
     /// </summary>
     public TimeSpan ApprovalWaitTimeout { get; set; } = TimeSpan.FromMinutes(5);
+}
+
+/// <summary>
+/// Per-role LLM model selection for the multi-agent workflow.
+/// </summary>
+public sealed class RoutingOptions
+{
+    /// <summary>
+    /// Model used for eligibility and procedure stages (default "gpt-4o-mini").
+    /// </summary>
+    public string CheapModel { get; set; } = "gpt-4o-mini";
+
+    /// <summary>
+    /// Model used for the response drafter stage (default "gpt-4o").
+    /// </summary>
+    public string PremiumModel { get; set; } = "gpt-4o";
 }

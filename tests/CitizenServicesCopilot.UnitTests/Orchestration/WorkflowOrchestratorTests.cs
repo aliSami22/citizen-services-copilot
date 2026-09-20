@@ -284,6 +284,7 @@ public class WorkflowOrchestratorTests
             toolExecutor ?? new StubToolExecutor(succeed: true),
             toolRegistry ?? new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
             new AlwaysOkPreFlight(),
+            new StubModelRouter(),
             options ?? new OrchestratorOptions(),
             NullLogger<WorkflowOrchestrator>.Instance);
 
@@ -417,6 +418,12 @@ public class WorkflowOrchestratorTests
     {
         public Task<BudgetCheckResult> CheckAsync(string userId, int estimatedTokens, CancellationToken ct = default)
             => Task.FromResult(BudgetCheckResult.Allowed);
+    }
+
+    private sealed class StubModelRouter : IModelRouter
+    {
+        public string SelectModel(AgentRole role)
+            => role == AgentRole.ResponseDrafter ? "premium" : "cheap";
     }
 
     private sealed class InMemoryRuns : IWorkflowRunRepository

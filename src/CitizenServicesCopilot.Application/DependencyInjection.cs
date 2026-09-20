@@ -16,6 +16,9 @@ public static class DependencyInjection
         // Budget gate (real implementation; no-op fallback when no record exists)
         services.AddScoped<IBudgetPreFlightCheck, Services.BudgetPreFlightCheck>();
 
+        // Budget-aware model routing
+        services.AddScoped<IModelRouter, Services.ConfigurationModelRouter>();
+
         // Prompt provider (embedded resources) and specialized agents
         services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();
