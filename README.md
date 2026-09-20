@@ -225,11 +225,26 @@ dotnet ef database update \
 
 ### 3. Run the API
 
+First, trust the local development HTTPS certificate (one-time):
+
+```bash
+dotnet dev-certs https --trust
+```
+
+On Windows this opens a certificate trust dialog; click **Yes** once. This
+must be done before the HTTPS endpoint will load in a browser without a
+certificate warning.
+
+Then start the API:
+
 ```bash
 dotnet run --project src/CitizenServicesCopilot.Api
 ```
 
-The API starts on `http://localhost:5177` (HTTP) by default.
+`dotnet run` uses the `https` profile by default, so the API listens on
+`https://localhost:7177` (HTTPS) and `http://localhost:5177` (HTTP), and your
+browser opens the Swagger UI at `https://localhost:7177/swagger/index.html`
+automatically.
 
 ### 4. Ingest a document
 
@@ -472,6 +487,31 @@ lsof -ti:5177 | xargs kill
 Alternative — change the port in
 `src/CitizenServicesCopilot.Api/Properties/launchSettings.json`
 (`http` profile → `applicationUrl`), then re-run.
+
+### `https://localhost:7177` gives a certificate warning
+
+Symptom: the browser shows a certificate warning (or blocks the page) when
+opening `https://localhost:7177/swagger/index.html`.
+
+Cause: the local development HTTPS certificate is not trusted yet.
+
+Fix — trust it once, then restart the browser:
+
+```bash
+dotnet dev-certs https --trust
+```
+
+On Windows this opens a certificate trust dialog; click **Yes** once.
+
+### Browser does not open automatically
+
+Symptom: `launchBrowser` is true, but no browser window opens when running
+`dotnet run`. On some Windows/PowerShell setups the auto-launch silently
+no-ops.
+
+Fix — open `https://localhost:7177/swagger/index.html` manually in your
+browser, or pass `--launch-profile http` to run over plain
+`http://localhost:5177`.
 
 ## Seeded Demo Accounts
 
