@@ -11,6 +11,8 @@ public record WorkflowRunResponse(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     decimal TotalCostUsd,
+    int TotalTokensIn,
+    int TotalTokensOut,
     string? ErrorMessage,
     IReadOnlyList<StepResponse> Steps);
 

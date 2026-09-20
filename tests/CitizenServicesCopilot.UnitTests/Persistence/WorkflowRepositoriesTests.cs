@@ -126,7 +126,7 @@ public class WorkflowRepositoriesTests
     }
 
     private static WorkflowRun NewRun()
-        => new(Guid.NewGuid(), "user-9", RunStatus.Running, DateTimeOffset.UtcNow, null, 0m, null);
+        => new(Guid.NewGuid(), "user-9", RunStatus.Running, DateTimeOffset.UtcNow, null, 0m, null, null);
 
     private static AgentStep NewStep(AgentRole role, int order)
         => new(Role: role, Status: AgentStepStatus.Succeeded, CreatedAtUtc: DateTimeOffset.UtcNow,

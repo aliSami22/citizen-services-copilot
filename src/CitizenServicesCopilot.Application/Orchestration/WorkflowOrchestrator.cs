@@ -38,6 +38,7 @@ public class WorkflowOrchestrator
     private readonly IToolRegistry _toolRegistry;
     private readonly IBudgetPreFlightCheck _budgetCheck;
     private readonly IModelRouter _modelRouter;
+    private readonly ICorrelationContext _correlation;
     private readonly OrchestratorOptions _options;
     private readonly ILogger<WorkflowOrchestrator> _logger;
 
@@ -54,6 +55,7 @@ public class WorkflowOrchestrator
         IToolRegistry toolRegistry,
         IBudgetPreFlightCheck budgetCheck,
         IModelRouter modelRouter,
+        ICorrelationContext correlation,
         OrchestratorOptions options,
         ILogger<WorkflowOrchestrator> logger)
     {
@@ -67,6 +69,7 @@ public class WorkflowOrchestrator
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _budgetCheck = budgetCheck ?? throw new ArgumentNullException(nameof(budgetCheck));
         _modelRouter = modelRouter ?? throw new ArgumentNullException(nameof(modelRouter));
+        _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _options = options ?? new OrchestratorOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -88,7 +91,7 @@ public class WorkflowOrchestrator
     {
         ct.ThrowIfCancellationRequested();
 
-        var run = WorkflowRun.Create(userId, runId);
+        var run = WorkflowRun.Create(userId, runId) with { CorrelationId = _correlation.CorrelationId };
         await _runs.AddAsync(run, ct);
         run = run with { Status = RunStatus.Running };
         await _runs.UpdateAsync(run, ct);
@@ -448,7 +451,8 @@ public class WorkflowOrchestrator
     {
         Id = step.Id == Guid.Empty ? Guid.NewGuid() : step.Id,
         RunId = runId,
-        Order = _stepOrder++
+        Order = _stepOrder++,
+        CorrelationId = _correlation.CorrelationId
     };
 
     /// <summary>

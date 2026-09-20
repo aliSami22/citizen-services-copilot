@@ -1,5 +1,6 @@
 using CitizenServicesCopilot.Api.DTOs;
 using CitizenServicesCopilot.Api.Endpoints;
+using CitizenServicesCopilot.Api.Middleware;
 using CitizenServicesCopilot.Application;
 using CitizenServicesCopilot.Application.Common.Exceptions;
 using CitizenServicesCopilot.Application.Orchestration;
@@ -17,6 +18,10 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Propagate the correlation ID from the request header (or a fresh Guid) into
+// the scoped ICorrelationContext used by the orchestrator and agents.
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

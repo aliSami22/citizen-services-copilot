@@ -40,6 +40,7 @@ public static class WorkflowEndpoints
             SubmitWorkflowRequest request,
             IServiceProvider services,
             IConfiguration config,
+            ICorrelationContext requestCorrelation,
             ILogger<WorkflowOrchestrator> logger,
             CancellationToken ct) =>
         {
@@ -50,6 +51,10 @@ public static class WorkflowEndpoints
 
             var runId = Guid.NewGuid();
             var modelName = config["LlmSettings:DefaultModel"] ?? "gpt-4o-mini";
+
+            // Correlate the background run with the originating request so the
+            // orchestrator and every recorded step share the same correlation id.
+            var correlationId = requestCorrelation.CorrelationId;
 
             // TODO-D: Replace fire-and-forget with a durable queue (Checkpoint D).
             // Current implementation risks task loss on app restart. Documented in
@@ -62,6 +67,7 @@ public static class WorkflowEndpoints
                     // scoped EF DbContext) is disposed when the handler returns
                     // its 202, which would break any long-running background work.
                     using var scope = services.CreateScope();
+                    scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = correlationId;
                     var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
                     await orchestrator.RunAsync(request.UserId, request.Question, modelName, CancellationToken.None, runId);
                 }
@@ -94,6 +100,8 @@ public static class WorkflowEndpoints
                 StartedAtUtc: run.StartedAtUtc,
                 CompletedAtUtc: run.CompletedAtUtc,
                 TotalCostUsd: run.TotalCostUsd,
+                TotalTokensIn: steps.Sum(s => s.TokensIn ?? 0),
+                TotalTokensOut: steps.Sum(s => s.TokensOut ?? 0),
                 ErrorMessage: run.ErrorMessage,
                 Steps: steps.OrderBy(s => s.Order).Select(s => new StepResponse(
                     Order: s.Order,

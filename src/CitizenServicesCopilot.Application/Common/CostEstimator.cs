@@ -32,4 +32,20 @@ public static class CostEstimator
         var outputRate = cheap ? CheapOutputRatePer1k : ExpensiveOutputRatePer1k;
         return (promptTokens / 1000.0m * inputRate) + (completionTokens / 1000.0m * outputRate);
     }
+
+    /// <summary>
+    /// Heuristic tier for a routed model name: the cheap tier is "gpt-4o-mini"
+    /// and the Ollama cheap model "llama3.2*"; everything else is premium.
+    /// </summary>
+    public static bool IsCheapModel(string modelName)
+    {
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            return true;
+        }
+
+        return modelName.Contains("mini", StringComparison.OrdinalIgnoreCase)
+            || modelName.StartsWith("llama3.2", StringComparison.OrdinalIgnoreCase)
+            || modelName.Equals("cheap", StringComparison.OrdinalIgnoreCase);
+    }
 }

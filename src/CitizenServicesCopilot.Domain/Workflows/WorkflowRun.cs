@@ -10,7 +10,8 @@ public sealed record WorkflowRun(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     decimal TotalCostUsd,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    Guid? CorrelationId = null)
 {
     public static WorkflowRun Create(string userId, Guid? id = null) => new(
         Id: id ?? Guid.NewGuid(),
@@ -19,5 +20,6 @@ public sealed record WorkflowRun(
         StartedAtUtc: DateTimeOffset.UtcNow,
         CompletedAtUtc: null,
         TotalCostUsd: 0m,
-        ErrorMessage: null);
+        ErrorMessage: null,
+        CorrelationId: null);
 }

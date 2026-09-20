@@ -304,6 +304,38 @@ public class WorkflowOrchestratorTests
         Assert.Equal(AgentRole.EligibilityIdentifier, onlyStep.Role);
     }
 
+    [Fact]
+    public async Task RunAsync_StampsCorrelationIdOnRunAndEveryStep()
+    {
+        var steps = new InMemorySteps();
+        var approvals = new InMemoryApprovals(new ApprovalAudit(
+            Guid.NewGuid(), Guid.NewGuid(), ApprovalDecision.Approved, DateTimeOffset.UtcNow, "approver", null, null));
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var correlationId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var orchestrator = new WorkflowOrchestrator(
+            agents,
+            retrieval,
+            runs,
+            steps,
+            approvals,
+            new StubToolExecutor(succeed: true),
+            new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
+            new AlwaysOkPreFlight(),
+            new StubModelRouter(),
+            new StubCorrelationContext { CorrelationId = correlationId },
+            new OrchestratorOptions(),
+            NullLogger<WorkflowOrchestrator>.Instance);
+
+        var run = await orchestrator.RunAsync("user-1", "How do I get a passport?", "test-model");
+
+        Assert.Equal(correlationId, run.CorrelationId);
+        Assert.Equal(correlationId, runs.Last!.CorrelationId);
+        Assert.NotEmpty(steps.All);
+        Assert.All(steps.All, s => Assert.Equal(correlationId, s.CorrelationId));
+    }
+
     private static WorkflowOrchestrator BuildOrchestrator(
         IReadOnlyList<IAgent> agents,
         IRetrievalService retrieval,
@@ -324,6 +356,7 @@ public class WorkflowOrchestratorTests
             toolRegistry ?? new ToolRegistry(new ITool[] { new StubPersistWriteTool() }),
             budgetCheck ?? new AlwaysOkPreFlight(),
             new StubModelRouter(),
+            new StubCorrelationContext(),
             options ?? new OrchestratorOptions(),
             NullLogger<WorkflowOrchestrator>.Instance);
 
@@ -478,6 +511,11 @@ public class WorkflowOrchestratorTests
     {
         public string SelectModel(AgentRole role)
             => role == AgentRole.ResponseDrafter ? "premium" : "cheap";
+    }
+
+    private sealed class StubCorrelationContext : ICorrelationContext
+    {
+        public Guid CorrelationId { get; set; } = new("11111111-2222-3333-4444-555555555555");
     }
 
     private sealed class InMemoryRuns : IWorkflowRunRepository

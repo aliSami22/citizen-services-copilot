@@ -19,6 +19,9 @@ public static class DependencyInjection
         // Budget-aware model routing
         services.AddScoped<IModelRouter, Services.ConfigurationModelRouter>();
 
+        // Correlation context (set by API middleware from X-Correlation-Id)
+        services.AddScoped<ICorrelationContext, Services.CorrelationContext>();
+
         // Prompt provider (embedded resources) and specialized agents
         services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();
