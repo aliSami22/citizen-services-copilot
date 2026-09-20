@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace CitizenServicesCopilot.Api.DTOs;
 
-public record SubmitWorkflowRequest(string UserId, string Question);
+public record SubmitWorkflowRequest(string Question);
 
 public record LoginRequest(string UserId, string Role);
 
@@ -32,11 +32,11 @@ public record StepResponse(
     string? OutputSummary,
     string? ErrorMessage);
 
-public record ApprovalRequest(string ApproverId);
+public record ApprovalRequest;
 
-public record RejectRequest(string ApproverId, string Reason);
+public record RejectRequest(string Reason);
 
-public record EditAndApproveRequest(string ApproverId, string EditedDraftJson, string? Reason);
+public record EditAndApproveRequest(string EditedDraftJson, string? Reason);
 
 public record ApprovalResponse(
     Guid Id,

@@ -83,7 +83,7 @@ HttpRequestMessage Submit()
     var request = new HttpRequestMessage(HttpMethod.Post, "/api/workflows/citizen-response")
     {
         Content = new StringContent(
-            JsonSerializer.Serialize(new { userId, question }), Encoding.UTF8, "application/json"),
+            JsonSerializer.Serialize(new { question }), Encoding.UTF8, "application/json"),
         Headers = { Authorization = Bearer(token) }
     };
     request.Headers.TryAddWithoutValidation("X-Correlation-Id", correlationId.ToString());

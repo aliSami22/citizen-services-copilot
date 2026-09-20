@@ -43,20 +43,19 @@ public class OpsEndpointsTests : IClassFixture<WorkflowApiFactory>
     public async Task Trace_ReturnsRunCorrelation_WhenHeaderPropagates()
     {
         var correlationId = Guid.NewGuid();
-        var client = _factory.CreateClient();
+        using var citizen = await _factory.CreateAuthenticatedClientAsync("u-trace", "Citizen");
 
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/workflows/citizen-response")
         {
-            Content = JsonContent.Create(new { userId = "u-trace", question = "Voter registration?" })
+            Content = JsonContent.Create(new { question = "Voter registration?" })
         };
         req.Headers.Add("X-Correlation-Id", correlationId.ToString());
 
-        var resp = await client.SendAsync(req);
+        var resp = await citizen.SendAsync(req);
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
         var runId = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("runId").GetString()!;
 
         // The run terminates quickly on an empty corpus (retrieval refusal).
-        using var citizen = await _factory.CreateAuthenticatedClientAsync("u-trace", "Citizen");
         var body = JsonSerializer.Deserialize<JsonElement>(await PollForTerminalTraceAsync(citizen, runId));
 
         Assert.Equal(runId, body.GetProperty("runId").GetString());
@@ -133,19 +132,18 @@ public class OpsCorrelationScopeTests : IClassFixture<StreamWorkflowApiFactory>
     public async Task Correlation_Header_ReachesLoggerScopes_OnSuccessPath()
     {
         var correlationId = Guid.NewGuid();
-        var client = _factory.CreateClient();
+        using var citizen = await _factory.CreateAuthenticatedClientAsync("u-logscope", "Citizen");
 
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/workflows/citizen-response")
         {
-            Content = JsonContent.Create(new { userId = "u-logscope", question = "Passport procedure?" })
+            Content = JsonContent.Create(new { question = "Passport procedure?" })
         };
         req.Headers.Add("X-Correlation-Id", correlationId.ToString());
 
-        var resp = await client.SendAsync(req);
+        var resp = await citizen.SendAsync(req);
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
         var runId = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("runId").GetString()!;
 
-        using var citizen = await _factory.CreateAuthenticatedClientAsync("u-logscope", "Citizen");
         string status = "Created";
         for (var i = 0; i < 40; i++)
         {

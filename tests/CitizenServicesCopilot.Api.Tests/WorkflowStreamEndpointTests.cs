@@ -45,17 +45,22 @@ public class StreamDiProbeTests : IClassFixture<StreamWorkflowApiFactory>
 /// </summary>
 public class WorkflowStreamEndpointTests : IClassFixture<StreamWorkflowApiFactory>
 {
+    private readonly StreamWorkflowApiFactory _factory;
     private readonly HttpClient _client;
 
     public WorkflowStreamEndpointTests(StreamWorkflowApiFactory factory)
-        => _client = factory.CreateClient();
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
 
     [Fact]
     public async Task Get_WorkflowStream_EmitsStageStepAndDone()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var resp = await _client.GetAsync(
-            $"/api/workflows/stream?userId=u-stream&question={Uri.EscapeDataString("Passport procedure?")}",
+        using var client = await _factory.CreateAuthenticatedClientAsync("u-stream", "Citizen");
+        var resp = await client.GetAsync(
+            $"/api/workflows/stream?question={Uri.EscapeDataString("Passport procedure?")}",
             timeout.Token);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -101,6 +106,13 @@ public class WorkflowStreamEndpointTests : IClassFixture<StreamWorkflowApiFactor
         Assert.Contains(events, e => IsType(e, "done") && Get(e, "status") == "Failed");
     }
 
+    [Fact]
+    public async Task Get_WorkflowStream_WithoutToken_Returns401()
+    {
+        var resp = await _client.GetAsync("/api/workflows/stream?question=test");
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
     private static bool IsType(JsonElement evt, string type)
         => evt.GetProperty("type").GetString() == type;
 
@@ -133,9 +145,13 @@ public class WorkflowStreamCancelTests : IClassFixture<StreamWorkflowCancelApiFa
         var userId = $"u-cancel-{Guid.NewGuid():N}";
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
+        // The stream is now authenticated; identity comes from the JWT "sub"
+        // claim and the query carries no userId.
+        using var client = await _factory.CreateAuthenticatedClientAsync(userId, "Citizen");
+
         var req = new HttpRequestMessage(HttpMethod.Get,
-            $"/api/workflows/stream?userId={userId}&question={Uri.EscapeDataString("Passport procedure?")}");
-        var resp = await _client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            $"/api/workflows/stream?question={Uri.EscapeDataString("Passport procedure?")}");
+        var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
         Guid runId = Guid.Empty;
@@ -177,10 +193,9 @@ public class WorkflowStreamCancelTests : IClassFixture<StreamWorkflowCancelApiFa
         cts.Cancel();
         resp.Dispose();
 
-        // The run-status endpoint requires authentication; the stream user owns
-        // the run, so a Citizen token for the same userId may read it.
-        using var authed = await _factory.CreateAuthenticatedClientAsync(userId, "Citizen");
-        await WaitForRunAsync(authed, runId);
+        // The stream user owns the run, so the same authenticated client may
+        // read its terminal state.
+        await WaitForRunAsync(client, runId);
     }
 
     private async Task WaitForRunAsync(HttpClient client, Guid runId)

@@ -32,16 +32,16 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     [Fact]
     public async Task Post_CitizenResponse_Returns202WithRunId()
     {
-        var resp = await _client.PostAsJsonAsync("/api/workflows/citizen-response",
-            new { userId = "u-1", question = "What is the unemployment benefit?" });
+        // Identity comes from the JWT "sub" claim, so the submit must be
+        // authenticated and the body carries no userId.
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-1", "Citizen");
+        var resp = await citizen.PostAsJsonAsync("/api/workflows/citizen-response",
+            new { question = "What is the unemployment benefit?" });
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
         var runId = body.GetProperty("runId").GetString();
         Assert.True(Guid.TryParse(runId, out _));
         Assert.False(string.IsNullOrWhiteSpace(runId));
-
-        // Authenticated client for the (now protected) run lookup endpoints.
-        var citizen = await _factory.CreateAuthenticatedClientAsync("u-1", "Citizen");
 
         // Prove the background orchestration actually started: it must have
         // persisted the run record (proving full DI resolution of the
@@ -69,10 +69,19 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     }
 
     [Fact]
-    public async Task Post_CitizenResponse_EmptyQuestion_Returns400()
+    public async Task Post_CitizenResponse_WithoutToken_Returns401()
     {
         var resp = await _client.PostAsJsonAsync("/api/workflows/citizen-response",
-            new { userId = "u-1", question = "" });
+            new { question = "What is the unemployment benefit?" });
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_CitizenResponse_EmptyQuestion_Returns400()
+    {
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-1", "Citizen");
+        var resp = await citizen.PostAsJsonAsync("/api/workflows/citizen-response",
+            new { question = "" });
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
@@ -108,8 +117,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     [Fact]
     public async Task Approve_WithoutToken_Returns401()
     {
-        var resp = await _client.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve",
-            new { approverId = "officer-1" });
+        var resp = await _client.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve", new { });
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
@@ -117,7 +125,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     public async Task Reject_WithoutToken_Returns401()
     {
         var resp = await _client.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/reject",
-            new { approverId = "officer-1", reason = "insufficient evidence" });
+            new { reason = "insufficient evidence" });
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
@@ -125,8 +133,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     public async Task Approve_AsCitizen_Returns403()
     {
         var citizen = await _factory.CreateAuthenticatedClientAsync("u-civ", "Citizen");
-        var resp = await citizen.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve",
-            new { approverId = "officer-1" });
+        var resp = await citizen.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve", new { });
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
@@ -139,7 +146,6 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         {
             Content = JsonContent.Create(new
             {
-                approverId = "officer-1",
                 editedDraftJson = "not valid json",
                 reason = (string?)null
             })
@@ -158,10 +164,37 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         var req = new HttpRequestMessage(HttpMethod.Post,
             $"/api/runs/{Guid.NewGuid()}/approve")
         {
-            Content = JsonContent.Create(new { approverId = "officer-1" })
+            Content = JsonContent.Create(new { })
         };
         var resp = await officer.SendAsync(req);
         Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Approve_RecordsApproverFromJwt_NotBody()
+    {
+        // The run's owner is irrelevant here; identity is asserted from the
+        // JWT "sub" claim, so the body must NOT be able to influence it.
+        var officerId = $"o-appr-{Guid.NewGuid():N}";
+        Guid runId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var run = WorkflowRun.Create($"u-owner-{Guid.NewGuid():N}");
+            db.WorkflowRuns.Add(run);
+            await db.SaveChangesAsync();
+            runId = run.Id;
+        }
+
+        // Deliberately send a forged approverId in the body; it must be ignored.
+        var officer = await _factory.CreateAuthenticatedClientAsync(officerId, "Officer");
+        var resp = await officer.PostAsJsonAsync($"/api/runs/{runId}/approve",
+            new { approverId = "spoofed-approver" });
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(officerId, body.GetProperty("approverId").GetString());
+        Assert.Equal("Approved", body.GetProperty("decision").GetString());
     }
 
     [Fact]

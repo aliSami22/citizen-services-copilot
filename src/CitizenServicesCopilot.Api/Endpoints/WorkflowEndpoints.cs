@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -41,15 +42,24 @@ public static class WorkflowEndpoints
         // POST /api/workflows/citizen-response
         app.MapPost("/api/workflows/citizen-response", async (
             SubmitWorkflowRequest request,
+            HttpContext http,
             IServiceProvider services,
             IConfiguration config,
             ICorrelationContext requestCorrelation,
             ILogger<WorkflowOrchestrator> logger,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(request.UserId) || string.IsNullOrWhiteSpace(request.Question))
+            if (string.IsNullOrWhiteSpace(request.Question))
             {
-                return Results.BadRequest(new { message = "UserId and Question are required." });
+                return Results.BadRequest(new { message = "Question is required." });
+            }
+
+            // The caller identity comes from the JWT "sub" claim, never from the
+            // request body, so a citizen cannot run a workflow as someone else.
+            var userId = GetUserId(http);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
             }
 
             var runId = Guid.NewGuid();
@@ -72,7 +82,7 @@ public static class WorkflowEndpoints
                     using var scope = services.CreateScope();
                     scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = correlationId;
                     var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
-                    await orchestrator.RunAsync(request.UserId, request.Question, modelName, CancellationToken.None, runId);
+                    await orchestrator.RunAsync(userId, request.Question, modelName, CancellationToken.None, runId);
                 }
                 catch (Exception ex)
                 {
@@ -83,7 +93,8 @@ public static class WorkflowEndpoints
             return Results.Accepted($"/api/runs/{runId}", new { runId });
         })
         .WithName("SubmitCitizenResponse")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         // GET /api/runs/{runId}
         app.MapGet("/api/runs/{runId:guid}", async (
@@ -184,13 +195,21 @@ public static class WorkflowEndpoints
         // POST /api/runs/{runId}/approve
         app.MapPost("/api/runs/{runId}/approve", async (
             Guid runId,
-            ApprovalRequest request,
+            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
+            // The approver identity comes from the JWT "sub" claim, never from
+            // the request body, so a caller cannot forge who approved.
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
+
             try
             {
-                var audit = await approval.ApproveAsync(runId.ToString(), request.ApproverId, ct);
+                var audit = await approval.ApproveAsync(runId.ToString(), approverId, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (ApprovalAlreadyDecidedException ex)
@@ -210,12 +229,19 @@ public static class WorkflowEndpoints
         app.MapPost("/api/runs/{runId}/reject", async (
             Guid runId,
             RejectRequest request,
+            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
+
             try
             {
-                var audit = await approval.RejectAsync(runId.ToString(), request.ApproverId, request.Reason, ct);
+                var audit = await approval.RejectAsync(runId.ToString(), approverId, request.Reason, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (ApprovalAlreadyDecidedException ex)
@@ -235,13 +261,20 @@ public static class WorkflowEndpoints
         app.MapPost("/api/runs/{runId}/edit-and-approve", async (
             Guid runId,
             EditAndApproveRequest request,
+            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
+            var approverId = GetUserId(http);
+            if (approverId is null)
+            {
+                return Results.Unauthorized();
+            }
+
             try
             {
                 var audit = await approval.EditAndApproveAsync(
-                    runId.ToString(), request.ApproverId, request.EditedDraftJson, request.Reason, ct);
+                    runId.ToString(), approverId, request.EditedDraftJson, request.Reason, ct);
                 return Results.Ok(ToApprovalResponse(audit));
             }
             catch (InvalidEditedContentException ex)
@@ -314,12 +347,12 @@ public static class WorkflowEndpoints
         .WithTags("Workflows")
         .RequireAuthorization();
 
-        // GET /api/workflows/stream?userId={userId}&question={question}
+        // GET /api/workflows/stream?question={question}
         // Server-Sent Events: streams "stage"/"step"/"done"/"error" progress events
         // for a run executed on the request path. A client disconnect aborts the
-        // run (requestAborted propagates into the orchestrator).
+        // run (requestAborted propagates into the orchestrator). The caller
+        // identity comes from the JWT "sub" claim, not a query parameter.
         app.MapGet("/api/workflows/stream", async (
-            string userId,
             string question,
             IServiceProvider services,
             IConfiguration config,
@@ -328,9 +361,15 @@ public static class WorkflowEndpoints
             ILogger<WorkflowOrchestrator> logger,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(question))
+            var userId = GetUserId(http);
+            if (userId is null)
             {
-                return Results.BadRequest(new { message = "UserId and Question are required." });
+                return Results.Unauthorized();
+            }
+
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                return Results.BadRequest(new { message = "Question is required." });
             }
 
             var response = http.Response;
@@ -396,7 +435,8 @@ public static class WorkflowEndpoints
             return Results.Empty;
         })
         .WithName("StreamWorkflowProgress")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         return app;
     }
@@ -405,7 +445,11 @@ public static class WorkflowEndpoints
         http.User.IsInRole("Officer");
 
     private static string? GetUserId(HttpContext http) =>
-        http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        // The caller identity is the JWT "sub" (subject) claim. ASP.NET's default
+        // inbound claim mapping surfaces OIDC "sub" as ClaimTypes.NameIdentifier,
+        // so fall back to the mapped type when the raw "sub" claim was remapped.
+        http.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+        ?? http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
     private static ApprovalResponse ToApprovalResponse(ApprovalAudit a) => new(
         Id: a.Id,
