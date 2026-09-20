@@ -360,13 +360,60 @@ Duplicate submissions return `200 OK` with `isDuplicate: true`. Failed ingestion
 
 Budget exceeded returns `402 Payment Required`.
 
+### `GET /api/runs/{runId}`, `GET /api/users/{userId}/spend`
+
+> Added in **Checkpoint D** (auth) and **PR #11** (workflow). Requires a bearer
+> token; citizens may access only their own resources, officers any.
+
+- `GET /api/runs/{runId}` → run summary with the persisted `steps` array.
+- `GET /api/users/{userId}/spend` → aggregated token/cost accounting for a user
+  (summed from persisted agent steps).
+
+### `GET /api/runs/{runId}/trace`
+
+> Added in **Checkpoint D** (diagnostics). Same ownership policy as the run
+> view. Returns the full audit trail of one workflow run, including the
+> request correlation id and per-step timing/token/cost breakdown:
+
+```json
+{
+  "runId": "guid",
+  "correlationId": "guid",
+  "status": "Failed",
+  "startedAtUtc": "...",
+  "completedAtUtc": "...",
+  "steps": [
+    {
+      "order": 0,
+      "role": "EligibilityIdentifier",
+      "status": "Succeeded",
+      "toolName": "GroundedRetriever",
+      "durationMs": 812,
+      "tokensIn": 120,
+      "tokensOut": 40,
+      "costUsd": 0.00006,
+      "outputSummary": "...",
+      "errorMessage": null
+    }
+  ]
+}
+```
+
+### `GET /health`, `GET /ready`
+
+> Added in **Checkpoint D** (observability).
+
+- `GET /health` → liveness, always `200 {"status": "Healthy", ...}`.
+- `GET /ready` → readiness, probes the EF store with `CanConnectAsync`;
+  `200 {"status": "Ready", ...}` when reachable, `503` otherwise.
+
 ## Running Tests
 
 ```bash
 dotnet test
 ```
 
-**Current status:** 70 tests passing (0 failed, 0 skipped).
+**Current status:** 191 tests passing (0 failed, 0 skipped).
 
 Test coverage areas:
 - Document ingestion service (idempotency, chunking, failure handling)
@@ -441,7 +488,7 @@ Roles and endpoint access:
 | --- | --- |
 | `POST /api/auth/login` | anonymous |
 | `POST /api/workflows/citizen-response`, `GET /api/workflows/stream` | anonymous |
-| `GET /api/runs/{runId}` | any authenticated user; citizens only their own runs, officers any |
+| `GET /api/runs/{runId}`, `GET /api/runs/{runId}/trace` | any authenticated user; citizens only their own runs, officers any |
 | `GET /api/users/{userId}/spend` | any authenticated user; citizens only their own spend, officers any |
 | `POST /api/runs/{runId}/approve`, `/reject`, `/edit-and-approve` | `Officer` role only |
 
@@ -461,7 +508,7 @@ secret store). It must be at least 32 bytes.
 6. **Re-submit the same document** → observe `isDuplicate: true` (SHA-256 idempotency)
 7. **Ask a grounded question** via `POST /api/inquiries` with a question matching the ingested content
 8. **Ask an unrelated question** → observe the grounded refusal response (`isRefusal: true`)
-9. **Run the test suite:** `dotnet test` → 70/70 passing
+9. **Run the test suite:** `dotnet test` → 191/191 passing
 
 ## Current Limitations & Deferred Work
 

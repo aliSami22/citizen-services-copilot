@@ -132,6 +132,55 @@ public static class WorkflowEndpoints
         .WithTags("Workflows")
         .RequireAuthorization();
 
+        // GET /api/runs/{runId}/trace
+        // Diagnostics view: the run's correlation ID plus its ordered agent-step
+        // history (timing, tokens, cost) for post-hoc audit replay.
+        app.MapGet("/api/runs/{runId:guid}/trace", async (
+            Guid runId,
+            HttpContext http,
+            IWorkflowRunRepository runRepo,
+            IAgentStepRepository stepRepo,
+            CancellationToken ct) =>
+        {
+            var run = await runRepo.GetByIdAsync(runId, ct);
+            if (run is null) return Results.NotFound(new { message = $"Run {runId} not found." });
+
+            // Same ownership semantics as the run view: citizens may trace only
+            // their own runs; officers any.
+            if (!IsOfficer(http) && !string.Equals(run.UserId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            var steps = await stepRepo.GetForRunAsync(runId, ct);
+
+            return Results.Ok(new
+            {
+                runId = run.Id,
+                correlationId = run.CorrelationId,
+                userId = run.UserId,
+                status = run.Status.ToString(),
+                startedAtUtc = run.StartedAtUtc,
+                completedAtUtc = run.CompletedAtUtc,
+                steps = steps.OrderBy(s => s.Order).Select(s => new
+                {
+                    order = s.Order,
+                    role = s.Role.ToString(),
+                    status = s.Status.ToString(),
+                    toolName = s.ToolName,
+                    durationMs = s.DurationMs,
+                    tokensIn = s.TokensIn,
+                    tokensOut = s.TokensOut,
+                    costUsd = s.CostUsd,
+                    outputSummary = s.OutputSummary,
+                    errorMessage = s.ErrorMessage
+                })
+            });
+        })
+        .WithName("GetWorkflowRunTrace")
+        .WithTags("Workflows")
+        .RequireAuthorization();
+
         // POST /api/runs/{runId}/approve
         app.MapPost("/api/runs/{runId}/approve", async (
             Guid runId,

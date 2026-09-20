@@ -9,6 +9,7 @@ using CitizenServicesCopilot.Application.Orchestration;
 using CitizenServicesCopilot.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using CitizenServicesCopilot.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -160,6 +161,30 @@ app.MapPost("/api/documents/text", async (
 
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
+
+// Liveness probe: the process is up. Always 200 when the handler is reachable.
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestampUtc = DateTimeOffset.UtcNow }))
+    .WithTags("Ops");
+
+// Readiness probe: 200 when the backing store responds, 503 otherwise. Used by
+// orchestrators to take the instance out of rotation during a dependency outage.
+app.MapGet("/ready", async (AppDbContext db, CancellationToken ct) =>
+    {
+        bool ready;
+        try
+        {
+            ready = await db.Database.CanConnectAsync(ct);
+        }
+        catch
+        {
+            ready = false;
+        }
+
+        return ready
+            ? Results.Ok(new { status = "Ready", timestampUtc = DateTimeOffset.UtcNow })
+            : Results.Json(new { status = "Unavailable", timestampUtc = DateTimeOffset.UtcNow }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    })
+    .WithTags("Ops");
 
 app.MapWorkflowEndpoints();
 app.MapAuthEndpoints(builder.Configuration);

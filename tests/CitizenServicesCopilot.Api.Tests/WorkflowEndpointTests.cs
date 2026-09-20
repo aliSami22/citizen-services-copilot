@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace CitizenServicesCopilot.Api.Tests;
@@ -85,14 +86,14 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
 
     private async Task<string> WaitForTerminalAsync(string runId, HttpClient client)
     {
-        var status = "Created";
+        string status = "Created";
         for (var i = 0; i < 40; i++)
         {
             var resp = await client.GetAsync($"/api/runs/{runId}");
             if (resp.StatusCode == HttpStatusCode.OK)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                status = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("status").GetString();
+                status = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("status").GetString() ?? status;
             }
             resp.Dispose();
             if (status is "Approved" or "Rejected" or "Failed" or "Cancelled")
@@ -340,6 +341,12 @@ public class WorkflowApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
+            // Capture the CorrelationId that loggers see in BeginScope so the
+            // D4 diagnostics test can assert end-to-end correlation propagation.
+            var capture = new ScopeCapturingLoggerProvider();
+            services.AddSingleton(capture);
+            services.AddLogging(logging => logging.AddProvider(capture));
+
             // Swap the real Npgsql/pgvector AppDbContext for the in-memory
             // TestAppDbContext so endpoint tests run fully offline (no Postgres
             // service needed in CI). Mirrors GroundedRetrieverTests' approach of
