@@ -496,6 +496,21 @@ The signing key comes from `Jwt:Key` (Development: `appsettings.Development.json
 or `dotnet user-secrets set Jwt:Key "..."`; production: `JWT__KEY` env var or a
 secret store). It must be at least 32 bytes.
 
+## Citizen Workflow CLI
+
+> Added in **Checkpoint D**. A dependency-free console client that drives the
+> API end-to-end: logs in as a citizen, submits a question, then polls the run
+> trace until it terminates and prints it.
+
+```bash
+dotnet run --project src/CitizenServicesCopilot.Cli -- [baseUrl] [userId] [question]
+# e.g.  dotnet run --project src/CitizenServicesCopilot.Cli -- http://localhost:5177 citizen-1 "Passport procedure?"
+```
+
+`baseUrl` defaults to `http://localhost:5177`, `userId` to `cli-user`; if the
+question is omitted it is prompted on stdin. Exit code `0` for `Approved`/
+`Rejected`, `1` otherwise (including `Failed`/`Cancelled`).
+
 ## 5-Minute Demo Path
 
 > Based **only** on currently working capabilities.
