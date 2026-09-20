@@ -1,4 +1,8 @@
+using System.Text;
+using System.Text.Json;
+using System.Threading.Channels;
 using CitizenServicesCopilot.Api.DTOs;
+using CitizenServicesCopilot.Api.Streaming;
 using CitizenServicesCopilot.Application.Common.Exceptions;
 using CitizenServicesCopilot.Application.Common.Interfaces;
 using CitizenServicesCopilot.Application.Common.Models;
@@ -248,6 +252,90 @@ public static class WorkflowEndpoints
                 PeriodEndUtc: periodEnd));
         })
         .WithName("GetUserSpend")
+        .WithTags("Workflows");
+
+        // GET /api/workflows/stream?userId={userId}&question={question}
+        // Server-Sent Events: streams "stage"/"step"/"done"/"error" progress events
+        // for a run executed on the request path. A client disconnect aborts the
+        // run (requestAborted propagates into the orchestrator).
+        app.MapGet("/api/workflows/stream", async (
+            string userId,
+            string question,
+            IServiceProvider services,
+            IConfiguration config,
+            ICorrelationContext requestCorrelation,
+            HttpContext http,
+            ILogger<WorkflowOrchestrator> logger,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(question))
+            {
+                return Results.BadRequest(new { message = "UserId and Question are required." });
+            }
+
+            var response = http.Response;
+            response.ContentType = "text/event-stream";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers.Connection = "keep-alive";
+            await response.StartAsync(ct);
+
+            var modelName = config["LlmSettings:DefaultModel"] ?? "gpt-4o-mini";
+
+            // Unbounded channel: events are few and small; writers must never
+            // deadlock the orchestrator behind a slow or disconnected client.
+            var channel = Channel.CreateUnbounded<WorkflowEvent>(new UnboundedChannelOptions { SingleReader = true });
+            var sink = new ChannelWorkflowProgressSink(channel);
+
+            var runTask = Task.Run(async () =>
+            {
+                try
+                {
+                    // Dedicated scope mirrors the background path so the scoped
+                    // DbContext outlives this request handler's stream pump.
+                    using var scope = services.CreateScope();
+                    scope.ServiceProvider.GetRequiredService<ICorrelationContext>().CorrelationId = requestCorrelation.CorrelationId;
+                    var orchestrator = scope.ServiceProvider.GetRequiredService<WorkflowOrchestrator>();
+                    await orchestrator.RunAsync(userId, question, modelName, ct, progress: sink);
+                }
+                finally
+                {
+                    sink.Complete();
+                }
+            }, CancellationToken.None);
+
+            try
+            {
+                await foreach (var evt in channel.Reader.ReadAllAsync(ct))
+                {
+                    var payload = JsonSerializer.Serialize(evt, JsonSerializerOptions.Web);
+                    await response.WriteAsync("data: " + payload + "\n\n", Encoding.UTF8, ct);
+                    await response.Body.FlushAsync(ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Client disconnected; the run aborts through the same token.
+            }
+            finally
+            {
+                // Observe run task failures so they surface as logged errors
+                // rather than unobserved-task-exceptions.
+                try
+                {
+                    await runTask;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Workflow stream run {UserId} failed after disconnect", userId);
+                }
+            }
+
+            return Results.Empty;
+        })
+        .WithName("StreamWorkflowProgress")
         .WithTags("Workflows");
 
         return app;

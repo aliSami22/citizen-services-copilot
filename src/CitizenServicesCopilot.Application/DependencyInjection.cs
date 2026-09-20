@@ -22,6 +22,9 @@ public static class DependencyInjection
         // Correlation context (set by API middleware from X-Correlation-Id)
         services.AddScoped<ICorrelationContext, Services.CorrelationContext>();
 
+        // Progress sink default: no-op unless a real-time consumer registers one.
+        services.AddScoped<IWorkflowProgressSink, Services.NullWorkflowProgressSink>();
+
         // Prompt provider (embedded resources) and specialized agents
         services.AddSingleton<Common.Interfaces.IPromptProvider, Services.Prompts.EmbeddedResourcePromptProvider>();
         services.AddScoped<EligibilityIdentifierAgent>();

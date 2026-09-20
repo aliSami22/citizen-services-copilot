@@ -55,6 +55,12 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         }
 
         Assert.Equal(HttpStatusCode.OK, status);
+
+        // Await the background run's terminal state so its fire-and-forget task
+        // does not leak into sibling tests (empty corpus -> retrieval refusal ->
+        // Failed). Bounded wait keeps this from blocking on a broken run.
+        var terminal = await WaitForTerminalAsync(runId);
+        Assert.Equal("Failed", terminal);
     }
 
     [Fact]
@@ -70,6 +76,27 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     {
         var resp = await _client.GetAsync($"/api/runs/{Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    private async Task<string> WaitForTerminalAsync(string runId)
+    {
+        var status = "Created";
+        for (var i = 0; i < 40; i++)
+        {
+            var resp = await _client.GetAsync($"/api/runs/{runId}");
+            if (resp.StatusCode == HttpStatusCode.OK)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                status = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("status").GetString();
+            }
+            resp.Dispose();
+            if (status is "Approved" or "Rejected" or "Failed" or "Cancelled")
+            {
+                return status;
+            }
+            await Task.Delay(250);
+        }
+        return status;
     }
 
     [Fact]

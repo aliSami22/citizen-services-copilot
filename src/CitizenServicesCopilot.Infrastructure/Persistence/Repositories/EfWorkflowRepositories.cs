@@ -46,7 +46,21 @@ public class EfWorkflowRunRepository : IWorkflowRunRepository
 
     public async Task UpdateAsync(WorkflowRun run, CancellationToken ct = default)
     {
-        _context.WorkflowRuns.Update(run);
+        // Tracking-friendly upsert, same rationale as AddAsync: the orchestrator
+        // mutates runs with record `with` expressions, so every Update is a *new*
+        // instance. Update(newInstance) would fail with "another instance with the
+        // same key is already being tracked" under a shared context; instead adopt
+        // the caller's values onto the already-tracked row.
+        var existing = await GetByIdAsync(run.Id, ct);
+        if (existing is not null)
+        {
+            _context.Entry(existing).CurrentValues.SetValues(run);
+        }
+        else
+        {
+            await _context.WorkflowRuns.AddAsync(run, ct);
+        }
+
         await _context.SaveChangesAsync(ct);
     }
 }
