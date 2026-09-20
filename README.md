@@ -430,11 +430,24 @@ Alternative — change the port in
 
 > Added in **Checkpoint D** (authentication & authorization).
 
-No demo accounts are seeded in the current codebase. The app has no
-authentication or authorization on any endpoint yet (see Current Limitations);
-user identity is passed in the request body (`userId` on
-`POST /api/inquiries`). Demo credentials, roles (`Citizen`, `Officer`), and
-budget seeding will be documented here when auth lands in Checkpoint D.
+Authentication is JWT bearer. Obtain a token with
+`POST /api/auth/login` and a JSON body `{ "userId": "...", "role": "Citizen" | "Officer" }`,
+then send it as `Authorization: Bearer <token>`. No user store is seeded: any
+`userId` may log in under a role (the demo has no registration).
+
+Roles and endpoint access:
+
+| Endpoint | Policy |
+| --- | --- |
+| `POST /api/auth/login` | anonymous |
+| `POST /api/workflows/citizen-response`, `GET /api/workflows/stream` | anonymous |
+| `GET /api/runs/{runId}` | any authenticated user; citizens only their own runs, officers any |
+| `GET /api/users/{userId}/spend` | any authenticated user; citizens only their own spend, officers any |
+| `POST /api/runs/{runId}/approve`, `/reject`, `/edit-and-approve` | `Officer` role only |
+
+The signing key comes from `Jwt:Key` (Development: `appsettings.Development.json`
+or `dotnet user-secrets set Jwt:Key "..."`; production: `JWT__KEY` env var or a
+secret store). It must be at least 32 bytes.
 
 ## 5-Minute Demo Path
 

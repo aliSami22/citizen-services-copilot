@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -19,8 +20,6 @@ namespace CitizenServicesCopilot.Api.Endpoints;
 
 public static class WorkflowEndpoints
 {
-    private const string OfficerRole = "Officer";
-
     public static IServiceCollection AddWorkflowServices(this IServiceCollection services)
     {
         // WorkflowOrchestrator is not registered by AddApplicationServices. Register
@@ -89,12 +88,20 @@ public static class WorkflowEndpoints
         // GET /api/runs/{runId}
         app.MapGet("/api/runs/{runId:guid}", async (
             Guid runId,
+            HttpContext http,
             IWorkflowRunRepository runRepo,
             IAgentStepRepository stepRepo,
             CancellationToken ct) =>
         {
             var run = await runRepo.GetByIdAsync(runId, ct);
             if (run is null) return Results.NotFound(new { message = $"Run {runId} not found." });
+
+            // Ownership: citizens may only read their own runs; officers may
+            // read any run.
+            if (!IsOfficer(http) && !string.Equals(run.UserId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
 
             var steps = await stepRepo.GetForRunAsync(runId, ct);
 
@@ -122,18 +129,16 @@ public static class WorkflowEndpoints
             return Results.Ok(response);
         })
         .WithName("GetWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         // POST /api/runs/{runId}/approve
         app.MapPost("/api/runs/{runId}/approve", async (
             Guid runId,
             ApprovalRequest request,
-            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-
             try
             {
                 var audit = await approval.ApproveAsync(runId.ToString(), request.ApproverId, ct);
@@ -149,18 +154,16 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("ApproveWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
 
         // POST /api/runs/{runId}/reject
         app.MapPost("/api/runs/{runId}/reject", async (
             Guid runId,
             RejectRequest request,
-            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-
             try
             {
                 var audit = await approval.RejectAsync(runId.ToString(), request.ApproverId, request.Reason, ct);
@@ -176,18 +179,16 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("RejectWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
 
         // POST /api/runs/{runId}/edit-and-approve
         app.MapPost("/api/runs/{runId}/edit-and-approve", async (
             Guid runId,
             EditAndApproveRequest request,
-            HttpContext http,
             IApprovalService approval,
             CancellationToken ct) =>
         {
-            if (!IsOfficer(http)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-
             try
             {
                 var audit = await approval.EditAndApproveAsync(
@@ -208,16 +209,25 @@ public static class WorkflowEndpoints
             }
         })
         .WithName("EditAndApproveWorkflowRun")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization("Officer");
 
         // GET /api/users/{userId}/spend
         app.MapGet("/api/users/{userId}/spend", async (
             string userId,
+            HttpContext http,
             IUserBudgetRepository budgetRepo,
             IWorkflowRunRepository runRepo,
             IAgentStepRepository stepRepo,
             CancellationToken ct) =>
         {
+            // Ownership: citizens may only view their own spend; officers may
+            // view any user's spend.
+            if (!IsOfficer(http) && !string.Equals(userId, GetUserId(http), StringComparison.Ordinal))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
             var budget = await budgetRepo.GetByUserIdAsync(userId, ct);
             if (budget is null)
             {
@@ -252,7 +262,8 @@ public static class WorkflowEndpoints
                 PeriodEndUtc: periodEnd));
         })
         .WithName("GetUserSpend")
-        .WithTags("Workflows");
+        .WithTags("Workflows")
+        .RequireAuthorization();
 
         // GET /api/workflows/stream?userId={userId}&question={question}
         // Server-Sent Events: streams "stage"/"step"/"done"/"error" progress events
@@ -342,8 +353,10 @@ public static class WorkflowEndpoints
     }
 
     private static bool IsOfficer(HttpContext http) =>
-        http.Request.Headers.TryGetValue("X-Role", out var role) &&
-        string.Equals(role.ToString(), OfficerRole, StringComparison.OrdinalIgnoreCase);
+        http.User.IsInRole("Officer");
+
+    private static string? GetUserId(HttpContext http) =>
+        http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
     private static ApprovalResponse ToApprovalResponse(ApprovalAudit a) => new(
         Id: a.Id,

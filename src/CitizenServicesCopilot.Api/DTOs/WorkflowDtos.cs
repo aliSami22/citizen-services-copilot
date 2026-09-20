@@ -5,6 +5,10 @@ namespace CitizenServicesCopilot.Api.DTOs;
 
 public record SubmitWorkflowRequest(string UserId, string Question);
 
+public record LoginRequest(string UserId, string Role);
+
+public record LoginResponse(string Token, DateTimeOffset ExpiresAtUtc);
+
 public record WorkflowRunResponse(
     Guid RunId,
     string Status,

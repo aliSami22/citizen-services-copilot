@@ -10,6 +10,7 @@ using CitizenServicesCopilot.Domain.Workflows;
 using CitizenServicesCopilot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -38,6 +39,9 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         Assert.True(Guid.TryParse(runId, out _));
         Assert.False(string.IsNullOrWhiteSpace(runId));
 
+        // Authenticated client for the (now protected) run lookup endpoints.
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-1", "Citizen");
+
         // Prove the background orchestration actually started: it must have
         // persisted the run record (proving full DI resolution of the
         // orchestrator and its repository dependencies) without throwing a
@@ -46,7 +50,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         for (var i = 0; i < 20; i++)
         {
             await Task.Delay(200);
-            var runResp = await _client.GetAsync($"/api/runs/{runId}");
+            var runResp = await citizen.GetAsync($"/api/runs/{runId}");
             status = runResp.StatusCode;
             if (status == HttpStatusCode.OK)
             {
@@ -59,7 +63,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         // Await the background run's terminal state so its fire-and-forget task
         // does not leak into sibling tests (empty corpus -> retrieval refusal ->
         // Failed). Bounded wait keeps this from blocking on a broken run.
-        var terminal = await WaitForTerminalAsync(runId);
+        var terminal = await WaitForTerminalAsync(runId, citizen);
         Assert.Equal("Failed", terminal);
     }
 
@@ -74,16 +78,17 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     [Fact]
     public async Task Get_Run_NotFound_Returns404()
     {
-        var resp = await _client.GetAsync($"/api/runs/{Guid.NewGuid()}");
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-reader", "Citizen");
+        var resp = await citizen.GetAsync($"/api/runs/{Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
-    private async Task<string> WaitForTerminalAsync(string runId)
+    private async Task<string> WaitForTerminalAsync(string runId, HttpClient client)
     {
         var status = "Created";
         for (var i = 0; i < 40; i++)
         {
-            var resp = await _client.GetAsync($"/api/runs/{runId}");
+            var resp = await client.GetAsync($"/api/runs/{runId}");
             if (resp.StatusCode == HttpStatusCode.OK)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -100,34 +105,45 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     }
 
     [Fact]
-    public async Task Approve_WithoutOfficerHeader_Returns403()
+    public async Task Approve_WithoutToken_Returns401()
     {
         var resp = await _client.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve",
             new { approverId = "officer-1" });
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
     [Fact]
-    public async Task Reject_WithoutOfficerHeader_Returns403()
+    public async Task Reject_WithoutToken_Returns401()
     {
         var resp = await _client.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/reject",
             new { approverId = "officer-1", reason = "insufficient evidence" });
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Approve_AsCitizen_Returns403()
+    {
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-civ", "Citizen");
+        var resp = await citizen.PostAsJsonAsync($"/api/runs/{Guid.NewGuid()}/approve",
+            new { approverId = "officer-1" });
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
     [Fact]
     public async Task EditAndApprove_InvalidJson_Returns400_WhenOfficer()
     {
+        var officer = await _factory.CreateAuthenticatedClientAsync("o-1", "Officer");
         var req = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/runs/{Guid.NewGuid()}/edit-and-approve");
-        req.Headers.Add("X-Role", "Officer");
-        req.Content = JsonContent.Create(new
+            $"/api/runs/{Guid.NewGuid()}/edit-and-approve")
         {
-            approverId = "officer-1",
-            editedDraftJson = "not valid json",
-            reason = (string?)null
-        });
-        var resp = await _client.SendAsync(req);
+            Content = JsonContent.Create(new
+            {
+                approverId = "officer-1",
+                editedDraftJson = "not valid json",
+                reason = (string?)null
+            })
+        };
+        var resp = await officer.SendAsync(req);
         // Acceptable: 400 (invalid JSON), 404 (run not found), 409 (already decided).
         // The test's intent is: it does NOT 200, and it does NOT 403.
         Assert.NotEqual(HttpStatusCode.OK, resp.StatusCode);
@@ -137,19 +153,30 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     [Fact]
     public async Task Approve_OnUnknownRun_WithOfficer_DoesNotReturn403()
     {
+        var officer = await _factory.CreateAuthenticatedClientAsync("o-2", "Officer");
         var req = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/runs/{Guid.NewGuid()}/approve");
-        req.Headers.Add("X-Role", "Officer");
-        req.Content = JsonContent.Create(new { approverId = "officer-1" });
-        var resp = await _client.SendAsync(req);
+            $"/api/runs/{Guid.NewGuid()}/approve")
+        {
+            Content = JsonContent.Create(new { approverId = "officer-1" })
+        };
+        var resp = await officer.SendAsync(req);
         Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
     [Fact]
     public async Task Get_Spend_NoBudgetRecord_Returns404()
     {
-        var resp = await _client.GetAsync($"/api/users/{Guid.NewGuid():N}/spend");
+        var officer = await _factory.CreateAuthenticatedClientAsync("o-3", "Officer");
+        var resp = await officer.GetAsync($"/api/users/{Guid.NewGuid():N}/spend");
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_Spend_AsDifferentCitizen_Returns403()
+    {
+        var citizen = await _factory.CreateAuthenticatedClientAsync("u-other", "Citizen");
+        var resp = await citizen.GetAsync($"/api/users/u-owner/spend");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
     [Fact]
@@ -197,7 +224,8 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
             await db.SaveChangesAsync();
         }
 
-        var resp = await _client.GetAsync($"/api/users/{userId}/spend");
+        var citizen = await _factory.CreateAuthenticatedClientAsync(userId, "Citizen");
+        var resp = await citizen.GetAsync($"/api/users/{userId}/spend");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
@@ -210,6 +238,66 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
         Assert.True(body.TryGetProperty("periodStartUtc", out _));
         Assert.True(body.TryGetProperty("periodEndUtc", out _));
     }
+
+    [Fact]
+    public async Task Login_ReturnsToken_200()
+    {
+        var resp = await _client.PostAsJsonAsync("/api/auth/login",
+            new { userId = "u-1", role = "Citizen" });
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        var token = body.GetProperty("token").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(token));
+        Assert.Equal(3, token!.Split('.').Length);
+        Assert.True(body.TryGetProperty("expiresAtUtc", out _));
+    }
+
+    [Fact]
+    public async Task Login_InvalidRole_Returns400()
+    {
+        var resp = await _client.PostAsJsonAsync("/api/auth/login",
+            new { userId = "u-1", role = "Admin" });
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_Run_AsDifferentCitizen_Returns403()
+    {
+        var owner = $"u-owner-{Guid.NewGuid():N}";
+        Guid runId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var run = WorkflowRun.Create(owner);
+            db.WorkflowRuns.Add(run);
+            await db.SaveChangesAsync();
+            runId = run.Id;
+        }
+
+        var stranger = await _factory.CreateAuthenticatedClientAsync($"u-stranger-{Guid.NewGuid():N}", "Citizen");
+        var resp = await stranger.GetAsync($"/api/runs/{runId}");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_Run_AsOfficer_Returns200()
+    {
+        var owner = $"u-own-{Guid.NewGuid():N}";
+        Guid runId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var run = WorkflowRun.Create(owner);
+            db.WorkflowRuns.Add(run);
+            await db.SaveChangesAsync();
+            runId = run.Id;
+        }
+
+        var officer = await _factory.CreateAuthenticatedClientAsync("o-4", "Officer");
+        var resp = await officer.GetAsync($"/api/runs/{runId}");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
 }
 
 public class WorkflowApiFactory : WebApplicationFactory<Program>
@@ -218,8 +306,38 @@ public class WorkflowApiFactory : WebApplicationFactory<Program>
     // would give every HttpContext a different (empty) database.
     private static readonly string _dbName = $"citizen-api-tests-{Guid.NewGuid():N}";
 
+    // Test-only signing key shared by every host so issued tokens validate.
+    private const string TestJwtKey = "test-only-jwt-key-0123456789abcdef0123456789abcdef";
+
+    public async Task<string> GetTokenAsync(string userId, string role)
+    {
+        using var client = CreateClient();
+        var resp = await client.PostAsJsonAsync("/api/auth/login", new { userId, role });
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("token").GetString()!;
+    }
+
+    public async Task<HttpClient> CreateAuthenticatedClientAsync(string userId, string role)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await GetTokenAsync(userId, role));
+        return client;
+    }
+
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
+        builder.ConfigureAppConfiguration((_, cfg) =>
+        {
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Key"] = TestJwtKey,
+                ["Jwt:Issuer"] = "CitizenServicesCopilot",
+                ["Jwt:Audience"] = "CitizenServicesCopilot.Api"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             // Swap the real Npgsql/pgvector AppDbContext for the in-memory

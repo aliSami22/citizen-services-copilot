@@ -177,10 +177,13 @@ public class WorkflowStreamCancelTests : IClassFixture<StreamWorkflowCancelApiFa
         cts.Cancel();
         resp.Dispose();
 
-        await WaitForRunAsync(runId);
+        // The run-status endpoint requires authentication; the stream user owns
+        // the run, so a Citizen token for the same userId may read it.
+        using var authed = await _factory.CreateAuthenticatedClientAsync(userId, "Citizen");
+        await WaitForRunAsync(authed, runId);
     }
 
-    private async Task WaitForRunAsync(Guid runId)
+    private async Task WaitForRunAsync(HttpClient client, Guid runId)
     {
         // The run must reach Cancelled and persist exactly one step
         // (eligibility) - nothing after cancellation. Poll until a terminal
@@ -190,7 +193,7 @@ public class WorkflowStreamCancelTests : IClassFixture<StreamWorkflowCancelApiFa
         HttpResponseMessage? resp = null;
         for (var i = 0; i < 60; i++)
         {
-            resp = await _client.GetAsync($"/api/runs/{runId}");
+            resp = await client.GetAsync($"/api/runs/{runId}");
             if (resp.StatusCode == HttpStatusCode.OK)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -209,7 +212,7 @@ public class WorkflowStreamCancelTests : IClassFixture<StreamWorkflowCancelApiFa
         Assert.Equal(HttpStatusCode.OK, resp!.StatusCode);
         Assert.Equal("Cancelled", status);
 
-        var body2 = await (await _client.GetAsync($"/api/runs/{runId}")).Content.ReadAsStringAsync();
+        var body2 = await (await client.GetAsync($"/api/runs/{runId}")).Content.ReadAsStringAsync();
         var run = JsonSerializer.Deserialize<JsonElement>(body2);
         var steps = run.GetProperty("steps");
         Assert.Equal(1, steps.GetArrayLength());
