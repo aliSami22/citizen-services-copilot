@@ -6,6 +6,12 @@ public class LlmOptions
 
     public string Provider { get; set; } = "Ollama"; // "OpenAI" or "Ollama"
 
+    /// <summary>
+    /// Bound for every outbound LLM HTTP call. Prevents a hung provider from
+    /// stalling a workflow run (and its SSE stream) indefinitely.
+    /// </summary>
+    public int HttpTimeoutSeconds { get; set; } = 60;
+
     public OpenAiConfig OpenAI { get; set; } = new();
     public OllamaConfig Ollama { get; set; } = new();
 }

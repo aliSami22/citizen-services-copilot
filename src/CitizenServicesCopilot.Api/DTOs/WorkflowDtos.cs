@@ -54,5 +54,5 @@ public record SpendViewResponse(
     decimal CostUsd,
     decimal BudgetLimitUsd,
     decimal BudgetRemainingUsd,
-    DateTimeOffset PeriodStartUtc,
-    DateTimeOffset PeriodEndUtc);
+    DateTimeOffset? PeriodStartUtc,
+    DateTimeOffset? PeriodEndUtc);

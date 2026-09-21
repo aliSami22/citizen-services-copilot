@@ -60,7 +60,7 @@ public class OpsEndpointsTests : IClassFixture<WorkflowApiFactory>
 
         Assert.Equal(runId, body.GetProperty("runId").GetString());
         Assert.Equal(correlationId, body.GetProperty("correlationId").GetGuid());
-        Assert.Equal("Failed", body.GetProperty("status").GetString());
+        Assert.Equal("Refused", body.GetProperty("status").GetString());
         Assert.True(body.TryGetProperty("steps", out var steps), "trace must include a steps array");
         Assert.True(steps.ValueKind == JsonValueKind.Array);
     }
@@ -105,7 +105,7 @@ public class OpsEndpointsTests : IClassFixture<WorkflowApiFactory>
                          JsonSerializer.Deserialize<JsonElement>(body).TryGetProperty("status", out var s)
                 ? s.GetString()
                 : null;
-            if (status is "Approved" or "Rejected" or "Failed" or "Cancelled")
+            if (status is "Approved" or "Rejected" or "Refused" or "Failed" or "Cancelled")
             {
                 return body;
             }

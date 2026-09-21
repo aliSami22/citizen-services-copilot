@@ -63,9 +63,9 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
 
         // Await the background run's terminal state so its fire-and-forget task
         // does not leak into sibling tests (empty corpus -> retrieval refusal ->
-        // Failed). Bounded wait keeps this from blocking on a broken run.
+        // Refused). Bounded wait keeps this from blocking on a broken run.
         var terminal = await WaitForTerminalAsync(runId, citizen);
-        Assert.Equal("Failed", terminal);
+        Assert.Equal("Refused", terminal);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
                 status = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("status").GetString() ?? status;
             }
             resp.Dispose();
-            if (status is "Approved" or "Rejected" or "Failed" or "Cancelled")
+            if (status is "Approved" or "Rejected" or "Refused" or "Failed" or "Cancelled")
             {
                 return status;
             }
@@ -240,11 +240,22 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     }
 
     [Fact]
-    public async Task Get_Spend_NoBudgetRecord_Returns404()
+    public async Task Get_Spend_NoBudgetRecord_Returns200WithZeros()
     {
+        var userId = $"u-nobudget-{Guid.NewGuid():N}";
         var officer = await _factory.CreateAuthenticatedClientAsync("o-3", "Officer");
-        var resp = await officer.GetAsync($"/api/users/{Guid.NewGuid():N}/spend");
-        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        var resp = await officer.GetAsync($"/api/users/{userId}/spend");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(userId, body.GetProperty("userId").GetString());
+        Assert.Equal(0, body.GetProperty("tokensIn").GetInt32());
+        Assert.Equal(0, body.GetProperty("tokensOut").GetInt32());
+        Assert.Equal(0m, body.GetProperty("costUsd").GetDecimal());
+        Assert.Equal(0m, body.GetProperty("budgetLimitUsd").GetDecimal());
+        Assert.Equal(0m, body.GetProperty("budgetRemainingUsd").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("periodStartUtc").ValueKind);
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("periodEndUtc").ValueKind);
     }
 
     [Fact]
