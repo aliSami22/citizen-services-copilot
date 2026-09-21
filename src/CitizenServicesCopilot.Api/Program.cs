@@ -32,16 +32,18 @@ builder.Services.AddOpenApi(options =>
             Title = "Citizen Services Copilot",
             Version = "v1"
         };
-        document.Components!.SecuritySchemes!["Bearer"] = new OpenApiSecurityScheme
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
         {
-            Name = "Authorization",
             Type = SecuritySchemeType.Http,
             Scheme = "bearer",
             BearerFormat = "JWT",
-            In = ParameterLocation.Header,
-            Description = "Enter the JWT token. Get one from POST /api/auth/login."
+            Description = "Enter the JWT token."
         };
-        document.Security!.Add(new OpenApiSecurityRequirement
+
+        document.Security ??= new List<OpenApiSecurityRequirement>();
+        document.Security.Add(new OpenApiSecurityRequirement
         {
             {
                 new OpenApiSecuritySchemeReference("Bearer", document, null),
