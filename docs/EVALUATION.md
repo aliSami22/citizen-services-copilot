@@ -209,6 +209,25 @@ Query: `What is the standard national ID card issuance fee?`
 - Returned sections: Civil Status Authority Decree 2024::Article 4: Renewal and Replacement, Passport and Immigration Department::Section 1: First Issuance, Official Gazette::Chapter 2: Requirements, Ministry of Supply::Section 3: Commodities
 - Claims not grounded in cited chunks: 50 EGP, renewal fee is 30 EGP
 
+## Arabic Retrieval Smoke Test
+
+Live smoke test (pre-demo audit, `chore/pre-demo-audit`) against the running API
+(Postgres up, migrations applied, no LLM provider in the environment):
+
+- Query: `ما هي الأوراق المطلوبة لتجديد بطاقة الرقم القومي؟`
+- Result: **Refusal.** `POST /api/inquiries` returned `200` with
+  `isRefusal: true`, `refusalReason: "Not enough information in the corpus"`,
+  zero citations.
+- Retrieval quality: **not live-verifiable here.** The referee path was correct
+  (empty corpus → refuse, no hallucination), but the Arabic document ingest
+  itself failed with `422 "Vector embedding generation failed during document
+  ingestion."` because no embedding/LLM provider (Ollama or OpenAI) is
+  reachable in this environment. Retrieval quality for Arabic is evidenced by
+  the *offline* golden set instead: Arabic cases `GS-002` and `GS-006` both
+  answer with **100% groundedness** above (R-1/BR-01 contract). Re-run this
+  smoke test with a reachable provider to confirm live Arabic inference; the
+  ingest must succeed first so the corpus contains the Arabic document.
+
 ## Known Limitations
 
 1. **Refusal gate still misses 2/5 adversarial cases offline.** ADV-004/ADV-005 retrieve content-bearing chunks that clear every threshold that the must-answer cases GS-006/ADV-006/ADV-007 also clear; see the Root Cause -> Applied Fix section for the residual and the production layered defence.
