@@ -79,6 +79,27 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// CORS for the GitHub Pages frontend (https://alisami22.github.io/
+// citizen-services-copilot/) plus the common local dev origins (dotnet watch /
+// Vite / a plain HTTP static server). The real frontend host is allow-listed
+// explicitly — never AllowAnyOrigin — so the browser can send the JWT
+// Authorization header on cross-origin calls (AllowCredentials + explicit
+// origins, the combination AllowAnyOrigin forbids).
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("frontend", policy =>
+        policy
+            .WithOrigins(
+                "https://alisami22.github.io",
+                "http://localhost:8000",
+                "http://localhost:5500",
+                "http://127.0.0.1:8000",
+                "http://127.0.0.1:5500")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
+});
+
 // JWT bearer authentication. The signing key must be 256 bits (32 bytes) or
 // longer. In Development it comes from appsettings.Development.json / user
 // secrets; production must override Jwt:Key via the JWT__KEY environment
@@ -125,6 +146,14 @@ var app = builder.Build();
 // Propagate the correlation ID from the request header (or a fresh Guid) into
 // the scoped ICorrelationContext used by the orchestrator and agents.
 app.UseMiddleware<CorrelationIdMiddleware>();
+
+// CORS must run before UseAuthentication/UseAuthorization and before any
+// Map* endpoint so the GitHub Pages frontend (and local dev origins) can issue
+// JWT-authenticated cross-origin calls. In this file the auth middleware sits
+// before the Development() Swagger block, so UseCors goes here — still after
+// Build() and ahead of every terminal endpoint mapping.
+app.UseCors("frontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
