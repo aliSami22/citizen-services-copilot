@@ -128,7 +128,7 @@ public class WorkflowOrchestrator
             var retrieval = await _retrievalService.RetrieveAsync(new RetrievalQuery(query), ct);
             if (retrieval.IsRefusal || retrieval.Chunks.Count == 0)
             {
-                return await FailAsync(run, retrieval.RefusalReason ?? InsufficientEvidence, ct);
+                return await RefuseAsync(run, retrieval.RefusalReason ?? InsufficientEvidence, ct);
             }
 
             input = input with { ContextChunks = retrieval.Chunks.Select(c => c.Chunk).ToList() };
@@ -214,7 +214,7 @@ public class WorkflowOrchestrator
         var (isRefusal, refusalReason) = ReadDraftRefusal(draftStep.OutputSummary);
         if (isRefusal)
         {
-            return await FailAsync(run, refusalReason ?? "draft refused", ct);
+            return await RefuseAsync(run, refusalReason ?? "draft refused", ct);
         }
 
         run = run with { Status = RunStatus.WaitingApproval };
@@ -308,7 +308,7 @@ public class WorkflowOrchestrator
         var retrieval = await _retrievalService.RetrieveAsync(new RetrievalQuery(input.Query), ct);
         if (retrieval.IsRefusal || retrieval.Chunks.Count == 0)
         {
-            var finished = await FailAsync(run, retrieval.RefusalReason ?? InsufficientEvidence, ct);
+            var finished = await RefuseAsync(run, retrieval.RefusalReason ?? InsufficientEvidence, ct);
             return new DegradedOutcome(true, finished, null, recordedSteps);
         }
 
@@ -527,6 +527,22 @@ public class WorkflowOrchestrator
 
         run = run with { ErrorMessage = reason };
         return await FinishAsync(run, RunStatus.Failed, ct);
+    }
+
+    /// <summary>
+    /// Terminal state for a run the evidence/refusal gate declined to answer.
+    /// Distinct from <see cref="RunStatus.Failed"/>: a refusal is an expected,
+    /// contract-compliant outcome (no grounding), not an operational error.
+    /// </summary>
+    private async Task<WorkflowRun> RefuseAsync(WorkflowRun run, string reason, CancellationToken ct)
+    {
+        _logger.LogInformation("Workflow run {RunId} refused: {Reason}", run.Id, reason);
+
+        await PublishEventAsync(new WorkflowEvent(
+            WorkflowEventTypes.Error, run.Id, Message: reason), ct);
+
+        run = run with { ErrorMessage = reason };
+        return await FinishAsync(run, RunStatus.Refused, ct);
     }
 
     private async Task<WorkflowRun> FinishAsync(WorkflowRun run, RunStatus terminal, CancellationToken ct)

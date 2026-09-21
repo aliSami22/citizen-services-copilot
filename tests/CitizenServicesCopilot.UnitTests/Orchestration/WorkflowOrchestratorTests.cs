@@ -123,7 +123,7 @@ public class WorkflowOrchestratorTests
     }
 
     [Fact]
-    public async Task Degradation_WhenSecondRetrievalRefuses_FailsRun()
+    public async Task Degradation_WhenSecondRetrievalRefuses_RefusesRun()
     {
         var steps = new InMemorySteps();
         var agents = new IAgent[] { FailingEligibility(), HappyProcedure(), HappyDrafter() };
@@ -133,9 +133,49 @@ public class WorkflowOrchestratorTests
 
         var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
 
-        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal(RunStatus.Refused, run.Status);
         Assert.Single(steps.All, s => s.Status == AgentStepStatus.Degraded);
         Assert.DoesNotContain(steps.All, s => s.Role == AgentRole.ResponseDrafter);
+    }
+
+    [Fact]
+    public async Task RetrievalRefusal_TerminatesRunAsRefused_NotFailed()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new StubRetrieval(_ => RefusalRetrieval());
+        var runs = new InMemoryRuns();
+        var sink = new CapturingProgressSink();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null), progressSink: sink);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Refused, run.Status);
+        Assert.Equal(RetrievalResult.DefaultRefusalMessage, run.ErrorMessage);
+        Assert.Empty(steps.All);
+        Assert.Contains(sink.Events,
+            e => e.Type == "error" && e.Message == RetrievalResult.DefaultRefusalMessage);
+        Assert.Contains(sink.Events, e => e.Type == "done" && e.Status == "Refused");
+        Assert.DoesNotContain(sink.Events, e => e.Type == "done" && e.Status == "Failed");
+    }
+
+    [Fact]
+    public async Task DraftRefusal_TerminatesRunAsRefused_NotFailed()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), RefusingDrafter("needs verification") };
+        var retrieval = new StubRetrieval(_ => SuccessRetrieval());
+        var runs = new InMemoryRuns();
+        var sink = new CapturingProgressSink();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null), progressSink: sink);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Refused, run.Status);
+        Assert.Equal("needs verification", run.ErrorMessage);
+        Assert.Contains(sink.Events, e => e.Type == "done" && e.Status == "Refused");
     }
 
     [Fact]
@@ -458,6 +498,16 @@ public class WorkflowOrchestratorTests
             Role = AgentRole.ResponseDrafter,
             Handler = (_, _) => Completed(SucceededStep(AgentRole.ResponseDrafter, ValidDraftJson))
         };
+
+    private static StubAgent RefusingDrafter(string reason)
+    {
+        var draft = JsonSerializer.Serialize(new { isRefusal = true, refusalReason = reason });
+        return new StubAgent
+        {
+            Role = AgentRole.ResponseDrafter,
+            Handler = (_, _) => Completed(SucceededStep(AgentRole.ResponseDrafter, draft))
+        };
+    }
 
     private static RetrievalResult SuccessRetrieval()
     {

@@ -7,6 +7,7 @@ public enum RunStatus
     WaitingApproval,
     Approved,
     Rejected,
+    Refused,
     Completed,
     Failed,
     Cancelled

@@ -63,9 +63,9 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
 
         // Await the background run's terminal state so its fire-and-forget task
         // does not leak into sibling tests (empty corpus -> retrieval refusal ->
-        // Failed). Bounded wait keeps this from blocking on a broken run.
+        // Refused). Bounded wait keeps this from blocking on a broken run.
         var terminal = await WaitForTerminalAsync(runId, citizen);
-        Assert.Equal("Failed", terminal);
+        Assert.Equal("Refused", terminal);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
                 status = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("status").GetString() ?? status;
             }
             resp.Dispose();
-            if (status is "Approved" or "Rejected" or "Failed" or "Cancelled")
+            if (status is "Approved" or "Rejected" or "Refused" or "Failed" or "Cancelled")
             {
                 return status;
             }
