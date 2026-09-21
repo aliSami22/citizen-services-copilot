@@ -10,8 +10,8 @@ namespace CitizenServicesCopilot.Infrastructure.Embeddings;
 /// <summary>
 /// OpenAI-compatible implementation of IEmbeddingGenerator via direct REST HTTP
 /// requests. Works with any OpenAI-compatible provider (OpenAI, Gemini
-/// compatibility endpoint, ...). The configured model determines the native
-/// output dimensionality; the current corpus targets 768 dimensions.
+/// compatibility endpoint, ...). The request pins output to
+/// <see cref="Dimensions"/> so the corpus stays on the schema's vector(768).
 /// </summary>
 public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
 {
@@ -52,7 +52,8 @@ public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
         var payload = new
         {
             model = string.IsNullOrWhiteSpace(_config.EmbeddingModel) ? "text-embedding-3-small" : _config.EmbeddingModel,
-            input = texts
+            input = texts,
+            dimensions = Dimensions
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -76,10 +77,17 @@ public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
 
         var dataArray = doc.RootElement.GetProperty("data");
         var results = new List<(int Index, float[] Vector)>();
+        int position = 0;
 
         foreach (var item in dataArray.EnumerateArray())
         {
-            int index = item.GetProperty("index").GetInt32();
+            // The OpenAI API always returns an `index`; the Gemini
+            // OpenAI-compatibility endpoint omits it, so fall back to the
+            // array position (inputs and outputs preserve order).
+            int index = item.TryGetProperty("index", out var indexElement) && indexElement.ValueKind == JsonValueKind.Number
+                ? indexElement.GetInt32()
+                : position;
+
             var vectorElement = item.GetProperty("embedding");
             var vector = new float[vectorElement.GetArrayLength()];
             int i = 0;
@@ -88,6 +96,7 @@ public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
                 vector[i++] = val.GetSingle();
             }
             results.Add((index, vector));
+            position++;
         }
 
         return results.OrderBy(r => r.Index).Select(r => r.Vector).ToList();

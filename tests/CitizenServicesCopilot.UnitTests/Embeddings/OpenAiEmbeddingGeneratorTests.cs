@@ -38,7 +38,7 @@ public class OpenAiEmbeddingGeneratorTests
     }
 
     [Fact]
-    public async Task GenerateEmbeddingsBatchAsync_SendsInputAsArray()
+    public async Task GenerateEmbeddingsBatchAsync_SendsInputAsArrayAndPinsDimensions()
     {
         var handler = new StubHttpMessageHandler(BuildBatchEmbeddingResponse(NativeDimensions, 2));
         var generator = CreateGenerator(handler);
@@ -52,6 +52,21 @@ public class OpenAiEmbeddingGeneratorTests
         var input = request.RootElement.GetProperty("input");
         Assert.Equal(JsonValueKind.Array, input.ValueKind);
         Assert.Equal(2, input.GetArrayLength());
+        Assert.Equal(NativeDimensions, request.RootElement.GetProperty("dimensions").GetInt32());
+    }
+
+    [Fact]
+    public async Task GenerateEmbeddingsBatchAsync_ResponseWithoutIndex_UsesArrayOrder()
+    {
+        // Gemini's OpenAI-compatibility endpoint omits `index`; the vectors must
+        // still be returned in input order rather than throwing.
+        var handler = new StubHttpMessageHandler(BuildBatchEmbeddingResponse(NativeDimensions, 2, includeIndex: false));
+        var generator = CreateGenerator(handler);
+
+        var vectors = await generator.GenerateEmbeddingsBatchAsync(new[] { "one", "two" });
+
+        Assert.Equal(2, vectors.Count);
+        Assert.All(vectors, v => Assert.Equal(NativeDimensions, v.Length));
     }
 
     private static OpenAiEmbeddingGenerator CreateGenerator(HttpMessageHandler handler)
@@ -63,13 +78,15 @@ public class OpenAiEmbeddingGeneratorTests
     private static string BuildEmbeddingResponse(int dimensions)
         => BuildBatchEmbeddingResponse(dimensions, 1);
 
-    private static string BuildBatchEmbeddingResponse(int dimensions, int items)
+    private static string BuildBatchEmbeddingResponse(int dimensions, int items, bool includeIndex = true)
     {
         var data = Enumerable.Range(0, items)
-            .Select(index => new
+            .Select(index =>
             {
-                index,
-                embedding = Enumerable.Range(1, dimensions).Select(i => (double)i).ToArray()
+                var embedding = Enumerable.Range(1, dimensions).Select(i => (double)i).ToArray();
+                return includeIndex
+                    ? (object)new { index, embedding }
+                    : new { embedding };
             })
             .ToArray();
 
