@@ -10,7 +10,8 @@ approval gate and per-user budget enforcement.
 
 - **Docker** + Docker Compose (PostgreSQL 16 + pgvector)
 - **.NET 10 SDK**
-- An LLM provider: **Ollama** (local, default, free) or an **OpenAI API key**
+- An LLM provider: **Ollama** (local, default, free) or an
+  **OpenAI-compatible API key** (OpenAI, Google Gemini)
 
 ## Quick Start
 
@@ -44,6 +45,8 @@ using the `:` → `__` convention (see `.env.example` for the full list).
 | `ConnectionStrings__DefaultConnection` | `Host=localhost;Port=5432;Database=citizenservices;Username=postgres;Password=postgrespassword` | PostgreSQL (pgvector) connection string |
 | `LlmSettings__Provider` | `Ollama` | `Ollama` or `OpenAI` |
 | `LlmSettings__OpenAI__ApiKey` | *(empty)* | Required when Provider is `OpenAI` |
+| `LlmSettings__OpenAI__BaseUrl` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint (e.g. Gemini) |
+| `LlmSettings__OpenAI__EmbeddingModel` | `text-embedding-3-small` | Must output **768** dimensions (schema is `vector(768)`) |
 | `LlmSettings__Ollama__BaseUrl` | `http://localhost:11434` | Ollama server |
 | `Jwt__Key` | *(dev value)* | JWT signing key; **must be ≥ 32 bytes**. Never commit a real key. |
 | `Orchestrator__ApprovalWaitTimeout` | `00:05:00` | How long the workflow waits for an officer decision |
@@ -61,6 +64,18 @@ using the `:` → `__` convention (see `.env.example` for the full list).
   $env:LlmSettings__OpenAI__ApiKey = "sk-..."
   ```
   Budgets are enforced per user by the cost governor before any LLM call.
+- **Google Gemini (free tier, OpenAI-compatible):** Gemini exposes an
+  OpenAI-compatible endpoint, so the same `OpenAI` provider works with no code
+  changes. Embeddings must match the schema's `vector(768)` (e.g.
+  `text-embedding-004`):
+  ```powershell
+  $env:LlmSettings__Provider = "OpenAI"
+  $env:LlmSettings__OpenAI__ApiKey = "<your-gemini-api-key>"
+  $env:LlmSettings__OpenAI__BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
+  $env:LlmSettings__OpenAI__CheapModel = "<gemini-flash-model>"
+  $env:LlmSettings__OpenAI__ExpensiveModel = "<gemini-pro-model>"
+  $env:LlmSettings__OpenAI__EmbeddingModel = "text-embedding-004"
+  ```
 
 ## Running Tests
 
@@ -107,7 +122,8 @@ OWASP-LLM teaching materials built from this repo live in `teaching/`
 ## Troubleshooting
 
 - **`422 Vector embedding generation failed` on ingest** → Ollama not reachable.
-  Run `ollama serve`, pull `nomic-embed-text`, or switch Provider to `OpenAI`.
+  Run `ollama serve`, pull `nomic-embed-text`, or switch Provider to `OpenAI`
+  (or Gemini's OpenAI-compatible endpoint, see above).
 - **`column ... does not exist` (500)** → schema drift; re-run
   `dotnet ef database update --project src/CitizenServicesCopilot.Infrastructure --startup-project src/CitizenServicesCopilot.Api`.
 - **Port 5177 in use** → `netstat -ano | findstr :5177`, `taskkill /PID <pid> /F`.
