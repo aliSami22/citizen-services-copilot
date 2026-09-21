@@ -74,12 +74,14 @@ public sealed class WorkflowEndpoints
                 return Results.BadRequest(new { message = "Question is required." });
             }
 
-            // The caller identity comes from the JWT "sub" claim, never from the
-            // request body, so a citizen cannot run a workflow as someone else.
-            var userId = GetUserId(http);
-            if (userId is null)
+            // Demo: no auth on this endpoint so Swagger UI can exercise it without
+            // a Bearer token. All admin endpoints remain JWT-protected.
+            // When authenticated, the caller identity comes from the JWT "sub"
+            // claim; the no-auth demo path falls back to the request body's UserId.
+            var userId = GetUserId(http) ?? request.UserId?.Trim();
+            if (string.IsNullOrWhiteSpace(userId))
             {
-                return Results.Unauthorized();
+                return Results.BadRequest(new { message = "UserId is required when not authenticated." });
             }
 
             var runId = Guid.NewGuid();
@@ -119,8 +121,7 @@ public sealed class WorkflowEndpoints
             return Results.Accepted($"/api/runs/{runId}", new { runId });
         })
         .WithName("SubmitCitizenResponse")
-        .WithTags("Workflows")
-        .RequireAuthorization();
+        .WithTags("Workflows");
 
         // GET /api/runs/{runId}
         app.MapGet("/api/runs/{runId:guid}", async (

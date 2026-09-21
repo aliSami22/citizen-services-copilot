@@ -69,11 +69,15 @@ public class WorkflowEndpointTests : IClassFixture<WorkflowApiFactory>
     }
 
     [Fact]
-    public async Task Post_CitizenResponse_WithoutToken_Returns401()
+    public async Task Post_CitizenResponse_WithoutToken_Returns202WithBodyUserId()
     {
+        // Demo: citizen-response is intentionally unauthenticated so Swagger UI
+        // can exercise it without a Bearer token; the body carries the userId.
         var resp = await _client.PostAsJsonAsync("/api/workflows/citizen-response",
-            new { question = "What is the unemployment benefit?" });
-        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+            new { userId = "u-anon", question = "What is the unemployment benefit?" });
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(Guid.TryParse(body.GetProperty("runId").GetString(), out _));
     }
 
     [Fact]
