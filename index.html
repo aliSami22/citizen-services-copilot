@@ -1,0 +1,120 @@
+<!-- Deployed at: https://<username>.github.io/<repo>/
+For the frontend to talk to the API from GitHub Pages, the backend must enable CORS:
+builder.Services.AddCors(o => o.AddPolicy("frontend", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+app.UseCors("frontend");
+Without this, browsers will block cross-origin requests.
+-->
+<!doctype html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Domain Copilot — خدمات المواطنين</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f8fafc; --fg:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#0e7490; --accent2:#0891b2; --success:#16a34a; --warning:#d97706; --danger:#dc2626; --card:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg); font-family:Cairo, Tahoma, sans-serif; font-size:14px; line-height:1.65; }
+    button,input,textarea,select { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { cursor:wait; opacity:.65; }
+    .shell { max-width:1120px; margin:auto; padding:0 20px; }
+    header { background:var(--card); border-bottom:1px solid var(--border); }
+    .header-inner { min-height:92px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+    h1 { margin:0; font-size:23px; line-height:1.25; letter-spacing:-.2px; }
+    .subtitle,.muted { color:var(--muted); }
+    .subtitle { margin:2px 0 0; font-size:13px; }
+    .header-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-start; }
+    .base-input { width:210px; direction:ltr; text-align:left; }
+    .chip { border:1px solid var(--border); background:#f8fafc; color:#334155; border-radius:999px; padding:5px 10px; white-space:nowrap; font-size:12px; }
+    nav { background:var(--card); border-bottom:1px solid var(--border); }
+    .tabs { display:flex; overflow-x:auto; gap:5px; }
+    .tab { border:0; color:var(--muted); background:transparent; padding:13px 16px 10px; border-bottom:2px solid transparent; white-space:nowrap; }
+    .tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
+    main { padding:26px 0 42px; min-height:calc(100vh - 207px); }
+    .panel { display:none; max-width:920px; }
+    .panel.active { display:block; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
+    h2 { font-size:18px; margin:0 0 14px; } h3 { font-size:14px; margin:0 0 8px; }
+    label { display:block; font-weight:600; margin:0 0 6px; }
+    input,textarea,select { width:100%; color:var(--fg); background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+    textarea { min-height:112px; resize:vertical; }
+    input:focus,textarea:focus,select:focus { outline:2px solid var(--accent2); outline-offset:1px; border-color:var(--accent2); }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .field-full { grid-column:1 / -1; }
+    .actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+    .btn { border:1px solid transparent; border-radius:8px; padding:9px 16px; line-height:1.5; font-weight:600; }
+    .primary { background:var(--accent); color:#fff; } .primary:hover:not(:disabled) { background:var(--accent2); }
+    .secondary { background:transparent; color:var(--fg); border-color:var(--border); } .danger { color:var(--danger); border-color:#fecaca; }
+    .notice { padding:11px 13px; border-radius:8px; border:1px solid var(--border); background:#f8fafc; }
+    .notice.warning,.refusal { color:#92400e; background:#fffbeb; border-color:#fcd34d; }
+    .notice.error { color:#991b1b; background:#fef2f2; border-color:#fecaca; }
+    .hidden { display:none !important; }
+    .result-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:15px; }
+    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; }
+    .blue { color:#075985; background:#e0f2fe; } .green { color:#166534; background:#dcfce7; } .amber { color:#92400e; background:#fef3c7; } .red { color:#991b1b; background:#fee2e2; }
+    .answer-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .answer-section { border:1px solid var(--border); border-radius:10px; padding:13px; background:#fff; }
+    .answer-section p { white-space:pre-wrap; margin:0; }
+    .citations { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    .citation { color:#155e75; background:#ecfeff; border:1px solid #a5f3fc; border-radius:999px; padding:4px 10px; font-size:12px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:10px; border-bottom:1px solid var(--border); text-align:right; vertical-align:top; }
+    th { color:var(--muted); font-size:12px; font-weight:700; }
+    .table-wrap { overflow-x:auto; }
+    .metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .metric { border:1px solid var(--border); border-radius:10px; padding:12px; } .metric span { color:var(--muted); display:block; font-size:12px; } .metric strong { display:block; margin-top:3px; font-size:16px; direction:ltr; text-align:right; }
+    .progress { height:9px; overflow:hidden; border-radius:99px; background:#e2e8f0; margin:15px 0 4px; } .progress > div { height:100%; background:var(--accent); border-radius:inherit; }
+    details { margin-top:8px; font-size:12px; white-space:pre-wrap; direction:ltr; text-align:left; }
+    footer { border-top:1px solid var(--border); background:var(--card); padding:16px 0; color:var(--muted); font-size:13px; }
+    footer a { color:var(--accent); text-decoration:none; margin-left:14px; }
+    #toasts { position:fixed; left:18px; bottom:18px; z-index:10; width:min(330px,calc(100vw - 36px)); display:grid; gap:8px; direction:rtl; }
+    .toast { background:#0f172a; color:#fff; padding:10px 13px; border-radius:8px; box-shadow:0 2px 8px rgba(15,23,42,.15); }
+    @media (max-width:650px) { .shell { padding:0 14px; } .header-inner { padding:15px 0; align-items:flex-start; flex-direction:column; } .header-tools { width:100%; } .base-input { flex:1; width:auto; min-width:190px; } .form-grid,.answer-grid,.metrics { grid-template-columns:1fr; } main { padding-top:18px; } .card { padding:15px; } }
+  </style>
+</head>
+<body>
+  <header><div class="shell header-inner"><div><h1>Domain Copilot</h1><p class="subtitle">خدمات المواطنين</p></div><div class="header-tools"><input id="baseUrl" class="base-input" aria-label="عنوان الخادم" dir="ltr"><button id="saveBase" class="btn secondary" type="button">حفظ</button><span id="userChip" class="chip">زائر</span></div></div></header>
+  <nav><div class="shell tabs" role="tablist"><button class="tab active" data-tab="login" role="tab">تسجيل الدخول</button><button class="tab" data-tab="ask" role="tab">اسأل سؤالاً</button><button class="tab" data-tab="workflow" role="tab">سير العمل متعدد الوكلاء</button><button class="tab" data-tab="budget" role="tab">الميزانية</button></div></nav>
+  <main class="shell">
+    <section id="login" class="panel active"><div class="card"><h2>تسجيل الدخول</h2><form id="loginForm" class="form-grid"><div><label for="loginUser">معرّف المستخدم</label><input id="loginUser" required autocomplete="username" placeholder="مثال: demo-citizen"></div><div><label for="loginRole">الدور</label><select id="loginRole"><option value="Citizen">مواطن</option><option value="Officer">موظف</option></select></div><div class="field-full actions"><button class="btn primary" type="submit">تسجيل الدخول</button></div></form><div id="loginStatus" class="notice hidden"></div><div id="logoutArea" class="actions hidden"><button id="logout" class="btn secondary danger" type="button">تسجيل الخروج</button></div></div></section>
+    <section id="ask" class="panel"><div class="card"><h2>اسأل عن خدمة</h2><form id="askForm"><label for="askQuestion">السؤال</label><textarea id="askQuestion" required placeholder="اكتب سؤالك هنا..."></textarea><div class="actions"><button class="btn primary" type="submit">اسأل</button></div></form></div><div id="askResult" class="hidden"></div></section>
+    <section id="workflow" class="panel"><div class="card"><h2>سير العمل متعدد الوكلاء</h2><form id="workflowForm"><label for="workflowQuestion">السؤال أو الحالة</label><textarea id="workflowQuestion" required placeholder="اكتب سؤال المواطن أو تفاصيل الحالة هنا..."></textarea><div class="actions"><button class="btn primary" type="submit">تشغيل</button></div></form></div><div id="workflowResult" class="hidden"></div></section>
+    <section id="budget" class="panel"><div class="card"><h2>الميزانية</h2><form id="budgetForm" class="form-grid"><div><label for="budgetUser">معرّف المستخدم</label><input id="budgetUser" required></div><div class="actions"><button class="btn primary" type="submit">عرض</button></div></form></div><div id="budgetResult" class="hidden"></div></section>
+  </main>
+  <footer><div class="shell">واجهات الخدمة: <a id="swaggerLink" href="#" target="_blank" rel="noopener">Swagger</a><a id="openapiLink" href="#" target="_blank" rel="noopener">OpenAPI</a></div></footer><div id="toasts" aria-live="polite"></div>
+  <script>
+  (() => {
+    const DEFAULT_URL = 'http://localhost:5177'; let pollTimer = null; let currentRunId = null;
+    const $ = id => document.getElementById(id);
+    const escapeHtml = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const baseUrl = () => (localStorage.getItem('copilot.baseUrl') || DEFAULT_URL).replace(/\/+$/, '');
+    const token = () => localStorage.getItem('copilot.jwt') || '';
+    const user = () => { try { return JSON.parse(localStorage.getItem('copilot.user') || 'null'); } catch { return null; } };
+    const toast = msg => { const el=document.createElement('div'); el.className='toast'; el.textContent=msg; $('toasts').append(el); setTimeout(()=>el.remove(),3000); };
+    const setBusy = (btn, busy) => { if (!btn) return; if (busy) { btn.dataset.text=btn.textContent; btn.disabled=true; btn.textContent='جارٍ...'; } else { btn.disabled=false; btn.textContent=btn.dataset.text || btn.textContent; } };
+    const statusClass = s => ({Pending:'blue',Running:'blue',WaitingApproval:'amber',Approved:'green',Completed:'green',Rejected:'amber',Refused:'amber',Failed:'red'}[s] || 'blue');
+    const statusArabic = s => ({Pending:'قيد الانتظار',Running:'جارٍ التنفيذ',WaitingApproval:'بانتظار الموافقة',Approved:'تمت الموافقة',Completed:'مكتمل',Rejected:'مرفوض',Refused:'تم الرفض',Failed:'فشل'}[s] || s);
+    function updateLinks(){ $('swaggerLink').href=baseUrl()+'/swagger'; $('openapiLink').href=baseUrl()+'/openapi/v1.json'; }
+    function updateIdentity(){ const u=user(); $('userChip').textContent=u ? `${u.userId} (${u.role === 'Officer' ? 'موظف' : 'مواطن'})` : 'زائر'; $('loginStatus').classList.toggle('hidden',!u); $('logoutArea').classList.toggle('hidden',!u); if(u) $('loginStatus').textContent='مُسجّل: '+u.userId+' ('+(u.role === 'Officer' ? 'موظف' : 'مواطن')+')'; $('budgetUser').value = u?.userId || $('budgetUser').value || 'demo-citizen'; }
+    async function api(path, options={}) { const headers={...(options.headers||{})}; if(options.body && !headers['Content-Type']) headers['Content-Type']='application/json'; if((path.startsWith('/api/runs/') || path.startsWith('/api/users/')) && token()) headers.Authorization='Bearer '+token(); let r; try { r=await fetch(baseUrl()+path,{...options,headers}); } catch(e) { throw new Error('تعذر الاتصال بالخادم. تحقق من عنوان الخادم وإعدادات CORS.'); } let data=null, raw=''; try { data=await r.json(); } catch { try { raw=await r.text(); } catch{} } if(!r.ok){ if(r.status===401){ localStorage.removeItem('copilot.jwt'); localStorage.removeItem('copilot.user'); updateIdentity(); toast('انتهت الجلسة. سجّل دخول من جديد.'); } if(r.status===402) toast('تم استهلاك الميزانية.'); const msg=r.status===422 ? (data?.failureReason || 'تعذرت معالجة المحتوى.') : r.status===500 ? 'خطأ في الخادم.' : (data?.failureReason || data?.message || 'تعذر إتمام الطلب.'); const err=new Error(msg); err.status=r.status; err.details=JSON.stringify(data || raw || {}); throw err; } return data; }
+    function showError(target,e){ target.className='card notice error'; target.innerHTML=escapeHtml(e.message)+(e.status===500?`<details><summary>تفاصيل الخطأ</summary>${escapeHtml(e.details || '')}</details>`:''); target.classList.remove('hidden'); }
+    function decodeJwt(jwt){ try { const part=jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(atob(part).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''))); } catch { return {}; } }
+    $('baseUrl').value=baseUrl(); updateLinks(); updateIdentity();
+    $('saveBase').addEventListener('click',()=>{ const v=$('baseUrl').value.trim().replace(/\/+$/,''); if(!/^https?:\/\/.+/i.test(v)){ toast('أدخل عنوان خادم صحيحاً يبدأ بـ http أو https.'); return; } localStorage.setItem('copilot.baseUrl',v); $('baseUrl').value=v; updateLinks(); toast('تم حفظ عنوان الخادم.'); });
+    document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active')); t.classList.add('active'); $(t.dataset.tab).classList.add('active'); }));
+    $('loginForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter; setBusy(btn,true); try { const userId=$('loginUser').value.trim(), role=$('loginRole').value; const data=await api('/api/auth/login',{method:'POST',body:JSON.stringify({userId,role})}); localStorage.setItem('copilot.jwt',data.token); const claims=decodeJwt(data.token); localStorage.setItem('copilot.user',JSON.stringify({userId:claims.sub || userId,role:claims.role || role})); updateIdentity(); toast('تم تسجيل الدخول بنجاح.'); } catch(err){ toast(err.message); } finally { setBusy(btn,false); } });
+    $('logout').addEventListener('click',()=>{ localStorage.removeItem('copilot.jwt'); localStorage.removeItem('copilot.user'); updateIdentity(); toast('تم تسجيل الخروج.'); });
+    $('askForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter, out=$('askResult'); setBusy(btn,true); out.classList.add('hidden'); try { const u=user(); const data=await api('/api/inquiries',{method:'POST',body:JSON.stringify({userId:u?.userId || 'guest',question:$('askQuestion').value.trim()})}); const d=data.draft || {}; if(d.isRefusal || data.status==='Refused'){ out.innerHTML=`<div class="card refusal"><div class="result-head"><span class="badge amber">رفض</span></div><strong>تعذر تقديم إجابة مستندة</strong><p>${escapeHtml(d.refusalReason || 'لا تتوفر إجابة مستندة لهذه المسألة.')}</p></div>`; } else { const sections=[['ملخص الأهلية',d.eligibilitySummary],['خطوات الإجراء',d.procedureSteps],['المستندات المطلوبة',d.requiredDocuments],['الرسوم والمدة',d.feesAndTimeline]]; const cites=(d.citations||[]).map(c=>`<span class="citation">${escapeHtml(c.documentTitle)}${c.section?' — '+escapeHtml(c.section):''}</span>`).join('') || '<span class="muted">لا توجد مراجع معروضة.</span>'; out.innerHTML=`<div class="card"><div class="result-head"><span class="badge green">مُستند</span><span class="muted" dir="ltr">${escapeHtml(data.routedModel || '')} · $${Number(data.actualCostUsd || 0).toFixed(4)}</span></div><div class="answer-grid">${sections.map(s=>`<article class="answer-section"><h3>${s[0]}</h3><p>${escapeHtml(s[1] || '—')}</p></article>`).join('')}</div><div class="citations">${cites}</div></div>`; } out.classList.remove('hidden'); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
+    const terminal=s=>['Approved','Rejected','Refused','Completed','Failed'].includes(s);
+    function workflowHtml(run){ const steps=(run.steps||[]).map(s=>`<tr><td>${escapeHtml(s.order)}</td><td>${escapeHtml(s.role)}</td><td>${escapeHtml(statusArabic(s.status))}</td><td dir="ltr">$${Number(s.costUsd||0).toFixed(4)}</td><td>${escapeHtml(s.durationMs ?? '—')} مللي ثانية</td></tr>`).join('') || '<tr><td colspan="5" class="muted">لا توجد خطوات متاحة بعد.</td></tr>'; const u=user(); const awaiting=run.status==='WaitingApproval'; const controls=awaiting && u?.role==='Officer' ? `<div class="actions"><button class="btn primary" data-decision="approve">موافقة</button><button class="btn secondary danger" data-decision="reject">رفض</button><button class="btn secondary" data-decision="edit">تعديل وموافقة</button></div>` : awaiting ? '<div class="notice warning">بانتظار موافقة موظف مختص</div>' : ''; return `<div class="card"><div class="result-head"><span class="badge ${statusClass(run.status)}">${statusArabic(run.status)}</span><span class="muted" dir="ltr">${escapeHtml(run.runId)}</span></div>${run.errorMessage?`<div class="notice error">${escapeHtml(run.errorMessage)}</div>`:''}<div class="table-wrap"><table><thead><tr><th>الترتيب</th><th>الوكيل</th><th>الحالة</th><th>تكلفة</th><th>المدة</th></tr></thead><tbody>${steps}</tbody></table></div>${controls}</div>`; }
+    async function refreshRun(){ if(!currentRunId) return; const out=$('workflowResult'); try { const run=await api('/api/runs/'+encodeURIComponent(currentRunId)); out.innerHTML=workflowHtml(run); out.classList.remove('hidden'); if(terminal(run.status)){ clearInterval(pollTimer); pollTimer=null; } } catch(e) { clearInterval(pollTimer); pollTimer=null; showError(out,e); } }
+    $('workflowForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter, out=$('workflowResult'); setBusy(btn,true); if(pollTimer) clearInterval(pollTimer); try { const u=user(), payload={question:$('workflowQuestion').value.trim()}; if(u?.userId) payload.userId=u.userId; const data=await api('/api/workflows/citizen-response',{method:'POST',body:JSON.stringify(payload)}); currentRunId=data.runId; await refreshRun(); pollTimer=setInterval(refreshRun,3000); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
+    $('workflowResult').addEventListener('click',async e=>{ const decision=e.target.dataset.decision; if(!decision || !currentRunId) return; const btn=e.target; let path='/approve', body; if(decision==='reject'){ const reason=prompt('اكتب سبب الرفض:'); if(reason===null) return; path='/reject'; body={reason}; } if(decision==='edit'){ const editedDraftJson=prompt('أدخل مسودة الرد المعدلة بصيغة JSON:'); if(editedDraftJson===null) return; const reason=prompt('اكتب سبب التعديل:'); if(reason===null) return; path='/edit-and-approve'; body={editedDraftJson,reason}; } setBusy(btn,true); try { await api('/api/runs/'+encodeURIComponent(currentRunId)+path,{method:'POST',body:body?JSON.stringify(body):undefined}); toast(decision==='reject'?'تم إرسال الرفض.':'تم إرسال القرار.'); await refreshRun(); } catch(err){ toast(err.message); } finally { setBusy(btn,false); } });
+    $('budgetForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter,out=$('budgetResult'); setBusy(btn,true); try { const data=await api('/api/users/'+encodeURIComponent($('budgetUser').value.trim())+'/spend'); const limit=Number(data.budgetLimitUsd||0), cost=Number(data.costUsd||0), percent=limit>0?Math.min(100,(cost/limit)*100):0; out.innerHTML=`<div class="card"><p><strong>النطاق:</strong> <span dir="ltr">${escapeHtml(data.periodStartUtc)} → ${escapeHtml(data.periodEndUtc)}</span></p><div class="metrics"><div class="metric"><span>الميزانية</span><strong>$${limit.toFixed(4)}</strong></div><div class="metric"><span>المُستهلك</span><strong>$${cost.toFixed(4)}</strong></div><div class="metric"><span>المتبقي</span><strong>$${Number(data.budgetRemainingUsd||0).toFixed(4)}</strong></div></div><div class="progress" aria-label="استهلاك الميزانية"><div style="width:${percent}%"></div></div><p class="muted">التوكنز: <span dir="ltr">${escapeHtml(data.tokensIn||0)} / ${escapeHtml(data.tokensOut||0)}</span></p></div>`; out.classList.remove('hidden'); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
+  })();
+  </script>
+</body>
+</html>
