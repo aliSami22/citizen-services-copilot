@@ -20,13 +20,49 @@ WorkflowEndpoints.AddWorkflowServices(builder.Services);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    // The Swagger UI serves the .NET 10 OpenAPI document (/openapi/v1.json),
+    // NOT Swashbuckle's /swagger/v1/swagger.json, so the Bearer security scheme
+    // must be registered on THIS document for the Authorize button to appear.
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Info = new OpenApiInfo
+        {
+            Title = "Citizen Services Copilot",
+            Version = "v1"
+        };
+        document.Components!.SecuritySchemes!["Bearer"] = new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter the JWT token. Get one from POST /api/auth/login."
+        };
+        document.Security!.Add(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecuritySchemeReference("Bearer", document, null),
+                new List<string>()
+            }
+        });
+        return Task.CompletedTask;
+    });
+});
 builder.Services.AddSwaggerGen(c =>
 {
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Citizen Services Copilot",
+        Version = "v1"
+    });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Paste: Bearer <token> (get one from POST /api/auth/login)",
+        Description = "Enter the JWT token. Get one from POST /api/auth/login.",
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
