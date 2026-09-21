@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace CitizenServicesCopilot.Api.DTOs;
 
-public record SubmitWorkflowRequest(string Question);
+public record SubmitWorkflowRequest(string Question, string? UserId = null);
 
 public record LoginRequest(string UserId, string Role);
 
