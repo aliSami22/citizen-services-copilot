@@ -51,7 +51,7 @@ public static class DependencyInjection
             {
                 var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var logger = sp.GetRequiredService<ILogger<OpenAiLlmProvider>>();
-                return new OpenAiLlmProvider(clientFactory.CreateClient(), llmOptions.OpenAI, logger);
+                return new OpenAiLlmProvider(clientFactory.CreateClient(), llmOptions.OpenAI, logger, llmOptions.HttpTimeoutSeconds);
             });
 
             services.AddScoped<IEmbeddingGenerator>(sp =>
@@ -68,7 +68,7 @@ public static class DependencyInjection
             {
                 var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var logger = sp.GetRequiredService<ILogger<OllamaLlmProvider>>();
-                return new OllamaLlmProvider(clientFactory.CreateClient(), llmOptions.Ollama, logger);
+                return new OllamaLlmProvider(clientFactory.CreateClient(), llmOptions.Ollama, logger, llmOptions.HttpTimeoutSeconds);
             });
 
             services.AddScoped<IEmbeddingGenerator>(sp =>

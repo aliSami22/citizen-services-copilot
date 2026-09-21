@@ -16,10 +16,19 @@ public class OpenAiLlmProvider : ILLMProvider
     public string ProviderName => "OpenAI";
 
     public OpenAiLlmProvider(HttpClient httpClient, OpenAiConfig config, ILogger<OpenAiLlmProvider> logger)
+        : this(httpClient, config, logger, httpTimeoutSeconds: 60)
+    {
+    }
+
+    public OpenAiLlmProvider(
+        HttpClient httpClient, OpenAiConfig config, ILogger<OpenAiLlmProvider> logger, int httpTimeoutSeconds)
     {
         _httpClient = httpClient;
         _config = config;
         _logger = logger;
+
+        // Bound every outbound call so a hung provider cannot stall the run.
+        _httpClient.Timeout = TimeSpan.FromSeconds(httpTimeoutSeconds > 0 ? httpTimeoutSeconds : 60);
     }
 
     public async Task<LlmResponse> GenerateCompletionAsync(LlmPrompt prompt, CancellationToken ct = default)

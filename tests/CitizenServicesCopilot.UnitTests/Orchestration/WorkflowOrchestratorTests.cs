@@ -179,6 +179,26 @@ public class WorkflowOrchestratorTests
     }
 
     [Fact]
+    public async Task RetrievalThrows_UnexpectedException_FailsRunAndPublishesErrorThenDone()
+    {
+        var steps = new InMemorySteps();
+        var agents = new IAgent[] { HappyEligibility(), HappyProcedure(), HappyDrafter() };
+        var retrieval = new ThrowingRetrieval(new InvalidOperationException("provider unreachable"));
+        var runs = new InMemoryRuns();
+        var sink = new CapturingProgressSink();
+        var orchestrator = BuildOrchestrator(
+            agents, retrieval, runs, steps, new InMemoryApprovals((ApprovalAudit?)null), progressSink: sink);
+
+        var run = await orchestrator.RunAsync("user-1", "Q", "test-model");
+
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Contains("provider unreachable", run.ErrorMessage);
+        Assert.Contains(sink.Events,
+            e => e.Type == "error" && e.Message?.Contains("provider unreachable") == true);
+        Assert.Contains(sink.Events, e => e.Type == "done" && e.Status == "Failed");
+    }
+
+    [Fact]
     public async Task Cancellation_DuringStageStopsFurtherExecution()
     {
         var steps = new InMemorySteps();
@@ -553,6 +573,16 @@ public class WorkflowOrchestratorTests
             CallCount++;
             return Task.FromResult(_factory(CallCount));
         }
+    }
+
+    private sealed class ThrowingRetrieval : IRetrievalService
+    {
+        private readonly Exception _exception;
+
+        public ThrowingRetrieval(Exception exception) => _exception = exception;
+
+        public Task<RetrievalResult> RetrieveAsync(RetrievalQuery query, CancellationToken ct = default)
+            => throw _exception;
     }
 
     private sealed class StubToolExecutor : IToolExecutor

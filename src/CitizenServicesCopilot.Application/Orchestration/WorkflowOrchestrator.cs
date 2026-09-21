@@ -197,6 +197,13 @@ public class WorkflowOrchestrator
             await FinishAsync(run, RunStatus.Cancelled, CancellationToken.None);
             throw;
         }
+        catch (Exception ex)
+        {
+            // Any unhandled failure (provider unreachable, DB error, timeout)
+            // must still terminate the run and publish an "error" event before
+            // the "done" event, so SSE clients never hang on a dead run.
+            return await FailAsync(run, $"engine failure: {ex.Message}", ct);
+        }
     }
 
     /// <summary>
