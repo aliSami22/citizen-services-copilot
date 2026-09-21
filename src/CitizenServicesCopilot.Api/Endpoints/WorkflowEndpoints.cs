@@ -339,7 +339,17 @@ public sealed class WorkflowEndpoints
             var budget = await budgetRepo.GetByUserIdAsync(userId, ct);
             if (budget is null)
             {
-                return Results.NotFound(new { message = $"No budget record for user '{userId}'." });
+                // A user with no budget record has simply spent nothing yet; an
+                // absent record is a valid zero state, not a missing resource.
+                return Results.Ok(new SpendViewResponse(
+                    UserId: userId,
+                    TokensIn: 0,
+                    TokensOut: 0,
+                    CostUsd: 0m,
+                    BudgetLimitUsd: 0m,
+                    BudgetRemainingUsd: 0m,
+                    PeriodStartUtc: null,
+                    PeriodEndUtc: null));
             }
 
             // Aggregated token/cost accounting from the user's persisted steps.
