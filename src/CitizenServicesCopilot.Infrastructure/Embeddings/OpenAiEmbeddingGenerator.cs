@@ -8,8 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace CitizenServicesCopilot.Infrastructure.Embeddings;
 
 /// <summary>
-/// OpenAI implementation of IEmbeddingGenerator via direct REST HTTP requests.
-/// Defaults to text-embedding-3-small (1536 dimensions).
+/// OpenAI-compatible implementation of IEmbeddingGenerator via direct REST HTTP
+/// requests. Works with any OpenAI-compatible provider (OpenAI, Gemini
+/// compatibility endpoint, ...). The configured model determines the native
+/// output dimensionality; the current corpus targets 768 dimensions.
 /// </summary>
 public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
 {
@@ -17,7 +19,7 @@ public class OpenAiEmbeddingGenerator : IEmbeddingGenerator
     private readonly OpenAiConfig _config;
     private readonly ILogger<OpenAiEmbeddingGenerator> _logger;
 
-    public int Dimensions => 1536;
+    public int Dimensions => 768;
 
     public OpenAiEmbeddingGenerator(HttpClient httpClient, OpenAiConfig config, ILogger<OpenAiEmbeddingGenerator> logger)
     {
