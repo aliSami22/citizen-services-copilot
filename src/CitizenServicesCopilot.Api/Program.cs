@@ -9,6 +9,7 @@ using CitizenServicesCopilot.Application.Orchestration;
 using CitizenServicesCopilot.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using CitizenServicesCopilot.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,7 +21,25 @@ WorkflowEndpoints.AddWorkflowServices(builder.Services);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Paste: Bearer <token> (get one from POST /api/auth/login)",
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer", document, null),
+            new List<string>()
+        }
+    });
+});
 
 // JWT bearer authentication. The signing key must be 256 bits (32 bytes) or
 // longer. In Development it comes from appsettings.Development.json / user
