@@ -79,10 +79,11 @@ public class OpenAiLlmProvider : ILLMProvider
 
     private string ResolveModelName(string requestedModel)
     {
-        if (requestedModel.Contains("expensive", StringComparison.OrdinalIgnoreCase))
-            return _config.ExpensiveModel;
         if (requestedModel.Contains("cheap", StringComparison.OrdinalIgnoreCase))
             return _config.CheapModel;
+        if (requestedModel.Contains("premium", StringComparison.OrdinalIgnoreCase)
+            || requestedModel.Contains("expensive", StringComparison.OrdinalIgnoreCase))
+            return _config.ExpensiveModel;
         return string.IsNullOrWhiteSpace(requestedModel) ? _config.CheapModel : requestedModel;
     }
 }

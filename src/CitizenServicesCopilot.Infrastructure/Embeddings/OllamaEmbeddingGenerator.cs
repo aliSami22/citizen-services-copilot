@@ -16,7 +16,7 @@ public class OllamaEmbeddingGenerator : IEmbeddingGenerator
     private readonly OllamaConfig _config;
     private readonly ILogger<OllamaEmbeddingGenerator> _logger;
 
-    public int Dimensions => 1536;
+    public int Dimensions => 768;
 
     public OllamaEmbeddingGenerator(HttpClient httpClient, OllamaConfig config, ILogger<OllamaEmbeddingGenerator> logger)
     {
@@ -74,24 +74,14 @@ public class OllamaEmbeddingGenerator : IEmbeddingGenerator
         {
             foreach (var vectorElement in embeddingsArray.EnumerateArray())
             {
-                var rawVector = new float[vectorElement.GetArrayLength()];
+                var vector = new float[vectorElement.GetArrayLength()];
                 int i = 0;
                 foreach (var val in vectorElement.EnumerateArray())
                 {
-                    rawVector[i++] = val.GetSingle();
+                    vector[i++] = val.GetSingle();
                 }
 
-                // Align to target 1536 dimensions if necessary
-                if (rawVector.Length == Dimensions)
-                {
-                    results.Add(rawVector);
-                }
-                else
-                {
-                    var targetVector = new float[Dimensions];
-                    Array.Copy(rawVector, targetVector, Math.Min(rawVector.Length, Dimensions));
-                    results.Add(targetVector);
-                }
+                results.Add(vector);
             }
         }
 

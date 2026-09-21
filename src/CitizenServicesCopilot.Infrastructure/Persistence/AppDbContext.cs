@@ -67,7 +67,7 @@ public class AppDbContext : DbContext
 
             b.Property(c => c.Embedding)
              .HasConversion(vectorConverter)
-             .HasColumnType("vector(1536)");
+             .HasColumnType("vector(768)");
 
             b.HasIndex(c => c.DocumentId);
 

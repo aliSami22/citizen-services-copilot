@@ -8,6 +8,7 @@ namespace CitizenServicesCopilot.Application.Services;
 public class CostGovernorService : ICostGovernor
 {
     private readonly IUserBudgetRepository _budgetRepository;
+    private readonly OrchestratorOptions _options;
 
     // Rates per 1,000 tokens (USD)
     public const decimal CheapInputRatePer1k = 0.00015m;
@@ -16,9 +17,10 @@ public class CostGovernorService : ICostGovernor
     public const decimal ExpensiveInputRatePer1k = 0.00250m;
     public const decimal ExpensiveOutputRatePer1k = 0.01000m;
 
-    public CostGovernorService(IUserBudgetRepository budgetRepository)
+    public CostGovernorService(IUserBudgetRepository budgetRepository, OrchestratorOptions options)
     {
         _budgetRepository = budgetRepository;
+        _options = options;
     }
 
     public async Task<CostEstimationResult> EvaluateAndEnforceBudgetAsync(string userId, string question, CancellationToken ct = default)
@@ -41,7 +43,7 @@ public class CostGovernorService : ICostGovernor
         // 1. Classify Complexity: Simple vs Complex
         bool isComplex = IsQueryComplex(question);
         string modelTier = isComplex ? "expensive" : "cheap";
-        string modelName = isComplex ? "gpt-4o" : "gpt-4o-mini";
+        string modelName = isComplex ? _options.Routing.PremiumModel : _options.Routing.CheapModel;
 
         // 2. Estimate Tokens BEFORE LLM Call
         // Approximate token count: 1 token ~ 4 chars + agent prompt overhead + retrieved context

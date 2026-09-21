@@ -55,7 +55,7 @@ public class DocumentIngestionServiceTests
     private readonly InMemoryDocumentRepository _repo = new();
     private readonly PlainTextExtractor _plainTextExtractor = new();
     private readonly WordOverlapChunker _chunker = new(chunkSizeInWords: 500, overlapWords: 50);
-    private readonly StubEmbeddingGenerator _stubEmbeddingGenerator = new(dimensions: 1536);
+    private readonly StubEmbeddingGenerator _stubEmbeddingGenerator = new(dimensions: 768);
 
     private DocumentIngestionService CreateService(
         IEnumerable<IDocumentExtractor>? extractors = null,
@@ -107,7 +107,7 @@ public class DocumentIngestionServiceTests
 
         // Verify vector embedding generation
         Assert.NotNull(chunk.Embedding);
-        Assert.Equal(1536, chunk.Embedding.Length);
+        Assert.Equal(768, chunk.Embedding.Length);
         Assert.Equal(1, _stubEmbeddingGenerator.BatchCallCount);
     }
 
@@ -128,7 +128,7 @@ public class DocumentIngestionServiceTests
             Status = IngestionStatus.Completed,
             Chunks = new List<DocumentChunk>
             {
-                new() { Id = Guid.NewGuid(), Content = content, ChunkIndex = 0, Embedding = new float[1536] }
+                new() { Id = Guid.NewGuid(), Content = content, ChunkIndex = 0, Embedding = new float[768] }
             }
         };
         await _repo.AddAsync(existingDoc);
@@ -208,7 +208,7 @@ public class DocumentIngestionServiceTests
         foreach (var chunk in savedDoc.Chunks)
         {
             Assert.NotNull(chunk.Embedding);
-            Assert.Equal(1536, chunk.Embedding.Length);
+            Assert.Equal(768, chunk.Embedding.Length);
         }
 
         Assert.Equal(1, _stubEmbeddingGenerator.BatchCallCount);

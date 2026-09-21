@@ -4,7 +4,7 @@ namespace CitizenServicesCopilot.UnitTests.Common;
 
 /// <summary>
 /// Deterministic offline stub for IEmbeddingGenerator used in unit tests.
-/// Generates fixed 1536-dimensional float arrays without external network/API calls.
+/// Generates fixed 768-dimensional float arrays without external network/API calls.
 /// </summary>
 public class StubEmbeddingGenerator : IEmbeddingGenerator
 {
@@ -14,7 +14,7 @@ public class StubEmbeddingGenerator : IEmbeddingGenerator
     public int TotalTextsProcessed { get; private set; }
     public bool ShouldThrow { get; set; }
 
-    public StubEmbeddingGenerator(int dimensions = 1536)
+    public StubEmbeddingGenerator(int dimensions = 768)
     {
         Dimensions = dimensions;
     }

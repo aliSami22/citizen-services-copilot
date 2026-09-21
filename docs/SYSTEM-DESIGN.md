@@ -55,6 +55,7 @@ Target topology for production (managed, multi-env, scaled):
 | **DR / backup** | No | MVP accepts data-loss window on a dev database. | Postgres `docker volume`; migration history committed; dev-certs + migration docs. | M — PITR + replica + restore drill; DB storage cost. |
 | **Unified cost accounting** | Partial | Per-user budget + spend exist for workflow path only (`58ebea2`, `724fb9b`); ingestion-side embedding costs and cross-endpoint aggregation not unified. | `UserBudget` rows, hard cutoff (HTTP 402), spend endpoint; run-trace cost per step. | S/M — single cost ledger across all LLM + embedding calls per user. |
 | **Production auth** (IdP/SSO/MFA) | No | Demo auth issues a JWT for any userId+role (`/api/auth/login`); fine for the brief, wrong for prod. | JWT bearer + role policies + per-resource ownership checks (citizens their own, officers all) — `910a962`; approver identity from `sub` claim (`0edec2b`). | L — integrate OIDC IdP, MFA for officers, token refresh. |
+| Gemini output repetition | 🟡 | gemini-2.5-flash repeats paragraphs in procedureSteps/feesAndTimeline | Prompt trim + lower temperature would help; post-MVP | ~2h |
 
 ## Decisions & Alternatives
 
