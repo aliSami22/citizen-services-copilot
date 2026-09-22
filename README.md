@@ -108,7 +108,7 @@ Full workflow: **login → ingest → ask → refuse → run → approve → tra
 
 ## Demo Video
 
-[Watch the 5-8 minute product demo](TO_BE_FILLED)
+[Watch the 5-8 minute product demo](https://www.youtube.com/watch?v=sTqs79Nq9jw)
 
 ## Teaching Video
 
