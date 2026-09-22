@@ -1,120 +1,1726 @@
-<!-- Deployed at: https://<username>.github.io/<repo>/
-For the frontend to talk to the API from GitHub Pages, the backend must enable CORS:
-builder.Services.AddCors(o => o.AddPolicy("frontend", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
-app.UseCors("frontend");
-Without this, browsers will block cross-origin requests.
--->
 <!doctype html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Domain Copilot — خدمات المواطنين</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domain Copilot | خدمات المواطنين</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#f8fafc; --fg:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#0e7490; --accent2:#0891b2; --success:#16a34a; --warning:#d97706; --danger:#dc2626; --card:#fff; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--bg); color:var(--fg); font-family:Cairo, Tahoma, sans-serif; font-size:14px; line-height:1.65; }
-    button,input,textarea,select { font:inherit; }
-    button { cursor:pointer; }
-    button:disabled { cursor:wait; opacity:.65; }
-    .shell { max-width:1120px; margin:auto; padding:0 20px; }
-    header { background:var(--card); border-bottom:1px solid var(--border); }
-    .header-inner { min-height:92px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
-    h1 { margin:0; font-size:23px; line-height:1.25; letter-spacing:-.2px; }
-    .subtitle,.muted { color:var(--muted); }
-    .subtitle { margin:2px 0 0; font-size:13px; }
-    .header-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-start; }
-    .base-input { width:210px; direction:ltr; text-align:left; }
-    .chip { border:1px solid var(--border); background:#f8fafc; color:#334155; border-radius:999px; padding:5px 10px; white-space:nowrap; font-size:12px; }
-    nav { background:var(--card); border-bottom:1px solid var(--border); }
-    .tabs { display:flex; overflow-x:auto; gap:5px; }
-    .tab { border:0; color:var(--muted); background:transparent; padding:13px 16px 10px; border-bottom:2px solid transparent; white-space:nowrap; }
-    .tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
-    main { padding:26px 0 42px; min-height:calc(100vh - 207px); }
-    .panel { display:none; max-width:920px; }
-    .panel.active { display:block; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
-    h2 { font-size:18px; margin:0 0 14px; } h3 { font-size:14px; margin:0 0 8px; }
-    label { display:block; font-weight:600; margin:0 0 6px; }
-    input,textarea,select { width:100%; color:var(--fg); background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
-    textarea { min-height:112px; resize:vertical; }
-    input:focus,textarea:focus,select:focus { outline:2px solid var(--accent2); outline-offset:1px; border-color:var(--accent2); }
-    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-    .field-full { grid-column:1 / -1; }
-    .actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:16px; }
-    .btn { border:1px solid transparent; border-radius:8px; padding:9px 16px; line-height:1.5; font-weight:600; }
-    .primary { background:var(--accent); color:#fff; } .primary:hover:not(:disabled) { background:var(--accent2); }
-    .secondary { background:transparent; color:var(--fg); border-color:var(--border); } .danger { color:var(--danger); border-color:#fecaca; }
-    .notice { padding:11px 13px; border-radius:8px; border:1px solid var(--border); background:#f8fafc; }
-    .notice.warning,.refusal { color:#92400e; background:#fffbeb; border-color:#fcd34d; }
-    .notice.error { color:#991b1b; background:#fef2f2; border-color:#fecaca; }
-    .hidden { display:none !important; }
-    .result-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:15px; }
-    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; }
-    .blue { color:#075985; background:#e0f2fe; } .green { color:#166534; background:#dcfce7; } .amber { color:#92400e; background:#fef3c7; } .red { color:#991b1b; background:#fee2e2; }
-    .answer-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-    .answer-section { border:1px solid var(--border); border-radius:10px; padding:13px; background:#fff; }
-    .answer-section p { white-space:pre-wrap; margin:0; }
-    .citations { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-    .citation { color:#155e75; background:#ecfeff; border:1px solid #a5f3fc; border-radius:999px; padding:4px 10px; font-size:12px; }
-    table { width:100%; border-collapse:collapse; }
-    th,td { padding:10px; border-bottom:1px solid var(--border); text-align:right; vertical-align:top; }
-    th { color:var(--muted); font-size:12px; font-weight:700; }
-    .table-wrap { overflow-x:auto; }
-    .metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
-    .metric { border:1px solid var(--border); border-radius:10px; padding:12px; } .metric span { color:var(--muted); display:block; font-size:12px; } .metric strong { display:block; margin-top:3px; font-size:16px; direction:ltr; text-align:right; }
-    .progress { height:9px; overflow:hidden; border-radius:99px; background:#e2e8f0; margin:15px 0 4px; } .progress > div { height:100%; background:var(--accent); border-radius:inherit; }
-    details { margin-top:8px; font-size:12px; white-space:pre-wrap; direction:ltr; text-align:left; }
-    footer { border-top:1px solid var(--border); background:var(--card); padding:16px 0; color:var(--muted); font-size:13px; }
-    footer a { color:var(--accent); text-decoration:none; margin-left:14px; }
-    #toasts { position:fixed; left:18px; bottom:18px; z-index:10; width:min(330px,calc(100vw - 36px)); display:grid; gap:8px; direction:rtl; }
-    .toast { background:#0f172a; color:#fff; padding:10px 13px; border-radius:8px; box-shadow:0 2px 8px rgba(15,23,42,.15); }
-    @media (max-width:650px) { .shell { padding:0 14px; } .header-inner { padding:15px 0; align-items:flex-start; flex-direction:column; } .header-tools { width:100%; } .base-input { flex:1; width:auto; min-width:190px; } .form-grid,.answer-grid,.metrics { grid-template-columns:1fr; } main { padding-top:18px; } .card { padding:15px; } }
+    :root {
+      --bg:        #0b1220;
+      --bg-soft:   #111a2c;
+      --card:      #141e33;
+      --border:    #22304a;
+      --fg:        #e6edf7;
+      --muted:     #8ea0bd;
+      --accent:    #22d3ee;
+      --accent-2:  #0ea5e9;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --danger:    #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.7;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    button, input, textarea, select {
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .container {
+      max-width: 1180px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Header */
+    header {
+      background-color: var(--bg-soft);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-content {
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 12px 0;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      background: var(--card);
+      border: 1.5px solid var(--accent);
+      border-radius: 10px;
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 20px;
+    }
+
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--fg);
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .url-input {
+      direction: ltr;
+      text-align: left;
+      width: 230px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--fg);
+    }
+
+    .user-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      white-space: nowrap;
+    }
+
+    /* Navigation / Tabs */
+    nav {
+      background: var(--bg-soft);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+      white-space: nowrap;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .tab-btn:hover {
+      color: var(--fg);
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+    }
+
+    /* Main Content & Panels */
+    main {
+      flex: 1;
+      padding: 28px 0 44px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: var(--fg);
+    }
+
+    .card-subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: -8px;
+      margin-bottom: 16px;
+    }
+
+    /* Hero / Overview */
+    .hero {
+      padding: 28px;
+    }
+
+    .hero-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .hero-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--fg);
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    .variant-badge {
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      background: rgba(34, 211, 238, 0.08);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .hero-desc {
+      color: #c7d4e8;
+      font-size: 14px;
+      line-height: 1.8;
+      max-width: 900px;
+      margin-bottom: 24px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .feature-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .feature-card h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .feature-card p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .hero-footer {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      direction: ltr;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    /* Forms & Inputs */
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--fg);
+    }
+
+    input, textarea, select {
+      width: 100%;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--fg);
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2);
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .form-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .form-full {
+      grid-column: 1 / -1;
+    }
+
+    .actions-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: var(--accent-2);
+      color: #ffffff;
+    }
+
+    .btn.primary:hover:not(:disabled) {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .btn.secondary {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--fg);
+    }
+
+    .btn.secondary:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn.danger {
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    .btn.danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: var(--danger);
+    }
+
+    /* Badges & Notices */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.blue {
+      background: rgba(14, 165, 233, 0.18);
+      color: #7dd3fc;
+      border: 1px solid rgba(14, 165, 233, 0.3);
+    }
+
+    .badge.green {
+      background: rgba(34, 197, 94, 0.15);
+      color: #86efac;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .badge.amber {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge.red {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .notice {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      margin-top: 14px;
+    }
+
+    .notice.refusal, .notice.warning {
+      background: rgba(245, 158, 11, 0.1);
+      border-color: var(--warning);
+      color: #fde68a;
+    }
+
+    .notice.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: var(--danger);
+      color: #fecaca;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+
+    .metric-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .metric-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .metric-card strong {
+      font-size: 16px;
+      color: var(--fg);
+      display: block;
+      direction: ltr;
+      text-align: right;
+    }
+
+    /* Answers Blocks */
+    .answer-blocks-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .answer-block {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .answer-block h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+
+    .answer-block .content {
+      color: #d6e0ef;
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .citations-wrap {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .citation-chip {
+      background: rgba(14, 116, 144, 0.25);
+      border: 1px solid #155e75;
+      color: #a5f3fc;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 650px;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 10px 14px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--bg-soft);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .tr-failed {
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    .tr-running {
+      background: rgba(14, 165, 233, 0.08);
+    }
+
+    /* Progress Bar */
+    .progress-bar-wrap {
+      background: #1f2b42;
+      border-radius: 999px;
+      height: 12px;
+      overflow: hidden;
+      margin: 16px 0 8px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent-2);
+      transition: width 0.3s ease;
+    }
+
+    .progress-bar-fill.warn {
+      background: var(--warning);
+    }
+
+    /* Quick Links Grid */
+    .quick-links-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .quick-link-card {
+      display: block;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      text-decoration: none;
+      color: var(--fg);
+      transition: border-color 0.2s, transform 0.1s;
+    }
+
+    .quick-link-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .quick-link-card span {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .quick-link-card small {
+      display: block;
+      color: var(--muted);
+      direction: ltr;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .adr-list {
+      padding-right: 20px;
+      color: #c7d4e8;
+      line-height: 1.9;
+    }
+
+    /* Toast Container */
+    #toastContainer {
+      position: fixed;
+      left: 20px;
+      bottom: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: min(360px, calc(100vw - 40px));
+      pointer-events: none;
+    }
+
+    .toast-item {
+      pointer-events: auto;
+      background: #1e293b;
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+      font-size: 13px;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--bg-soft);
+      padding: 16px 0;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: auto;
+    }
+
+    /* Mobile Responsiveness (375px+) */
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .header-left {
+        justify-content: space-between;
+      }
+      .url-input {
+        width: 100%;
+      }
+      .features-grid,
+      .quick-links-grid,
+      .answer-blocks-grid,
+      .form-grid,
+      .form-grid-4 {
+        grid-template-columns: 1fr;
+      }
+      .hero {
+        padding: 20px 16px;
+      }
+      .hero-header {
+        flex-direction: column;
+      }
+      .container {
+        padding: 0 14px;
+      }
+    }
   </style>
 </head>
 <body>
-  <header><div class="shell header-inner"><div><h1>Domain Copilot</h1><p class="subtitle">خدمات المواطنين</p></div><div class="header-tools"><input id="baseUrl" class="base-input" aria-label="عنوان الخادم" dir="ltr"><button id="saveBase" class="btn secondary" type="button">حفظ</button><span id="userChip" class="chip">زائر</span></div></div></header>
-  <nav><div class="shell tabs" role="tablist"><button class="tab active" data-tab="login" role="tab">تسجيل الدخول</button><button class="tab" data-tab="ask" role="tab">اسأل سؤالاً</button><button class="tab" data-tab="workflow" role="tab">سير العمل متعدد الوكلاء</button><button class="tab" data-tab="budget" role="tab">الميزانية</button></div></nav>
-  <main class="shell">
-    <section id="login" class="panel active"><div class="card"><h2>تسجيل الدخول</h2><form id="loginForm" class="form-grid"><div><label for="loginUser">معرّف المستخدم</label><input id="loginUser" required autocomplete="username" placeholder="مثال: demo-citizen"></div><div><label for="loginRole">الدور</label><select id="loginRole"><option value="Citizen">مواطن</option><option value="Officer">موظف</option></select></div><div class="field-full actions"><button class="btn primary" type="submit">تسجيل الدخول</button></div></form><div id="loginStatus" class="notice hidden"></div><div id="logoutArea" class="actions hidden"><button id="logout" class="btn secondary danger" type="button">تسجيل الخروج</button></div></div></section>
-    <section id="ask" class="panel"><div class="card"><h2>اسأل عن خدمة</h2><form id="askForm"><label for="askQuestion">السؤال</label><textarea id="askQuestion" required placeholder="اكتب سؤالك هنا..."></textarea><div class="actions"><button class="btn primary" type="submit">اسأل</button></div></form></div><div id="askResult" class="hidden"></div></section>
-    <section id="workflow" class="panel"><div class="card"><h2>سير العمل متعدد الوكلاء</h2><form id="workflowForm"><label for="workflowQuestion">السؤال أو الحالة</label><textarea id="workflowQuestion" required placeholder="اكتب سؤال المواطن أو تفاصيل الحالة هنا..."></textarea><div class="actions"><button class="btn primary" type="submit">تشغيل</button></div></form></div><div id="workflowResult" class="hidden"></div></section>
-    <section id="budget" class="panel"><div class="card"><h2>الميزانية</h2><form id="budgetForm" class="form-grid"><div><label for="budgetUser">معرّف المستخدم</label><input id="budgetUser" required></div><div class="actions"><button class="btn primary" type="submit">عرض</button></div></form></div><div id="budgetResult" class="hidden"></div></section>
+
+  <!-- Header -->
+  <header>
+    <div class="container header-content">
+      <div class="header-right">
+        <div class="brand-mark">D</div>
+        <div>
+          <h1 class="brand-title">Domain Copilot</h1>
+          <p class="brand-subtitle">خدمات المواطنين</p>
+        </div>
+      </div>
+      <div class="header-left">
+        <input id="baseUrlInput" class="url-input" aria-label="عنوان الخادم" placeholder="http://localhost:5177">
+        <button id="saveBaseUrlBtn" class="btn secondary" type="button">حفظ</button>
+        <span id="currentUserChip" class="user-chip">زائر</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Bar (RTL Order) -->
+  <nav>
+    <div class="container tab-bar" role="tablist">
+      <button class="tab-btn active" data-tab="tab-overview" role="tab">نظرة عامة</button>
+      <button class="tab-btn" data-tab="tab-login" role="tab">تسجيل الدخول</button>
+      <button class="tab-btn" data-tab="tab-ingest" role="tab">استيعاب مستند</button>
+      <button class="tab-btn" data-tab="tab-ask" role="tab">اسأل سؤال</button>
+      <button class="tab-btn" data-tab="tab-workflow" role="tab">Workflow</button>
+      <button class="tab-btn" data-tab="tab-budget" role="tab">الميزانية</button>
+      <button class="tab-btn" data-tab="tab-about" role="tab">عن المشروع</button>
+    </div>
+  </nav>
+
+  <!-- Main Content Panels -->
+  <main class="container">
+
+    <!-- TAB 1 — نظرة عامة -->
+    <section id="tab-overview" class="tab-panel active">
+      <article class="card hero">
+        <div class="hero-header">
+          <div>
+            <h2 class="hero-title">Domain Copilot</h2>
+            <p class="hero-subtitle">منصة Agentic RAG لخدمات المواطنين الحكومية</p>
+          </div>
+          <span class="variant-badge">D4 + T3</span>
+        </div>
+
+        <p class="hero-desc">
+          منصة ذكاء اصطناعي تساعد المواطن على معرفة حقوقه والإجراءات المطلوبة.
+          النظام يستوعب المستندات الرسمية، يجيب على الأسئلة بإجابات مستندة على
+          المصادر فقط — ويرفض الإجابة عندما لا يجد مصدرًا موثوقًا. للمواضيع
+          المعقدة، يشغّل ثلاثة وكلاء AI متخصصين، ثم يتطلب موافقة موظف حكومي
+          قبل إرسال أي رد.
+        </p>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <h4>1. استيعاب المستندات</h4>
+            <p>تقسيم النص إلى chunks، توليد embedding بأبعاد 768، وتخزينها في pgvector.</p>
+          </div>
+          <div class="feature-card">
+            <h4>2. بحث هجين</h4>
+            <p>دمج البحث الدلالي والبحث بالكلمات المفتاحية عبر RRF.</p>
+          </div>
+          <div class="feature-card">
+            <h4>3. إجابات مستندة</h4>
+            <p>كل جملة مربوطة بمصدرها. رفض صريح عند غياب الدليل.</p>
+          </div>
+          <div class="feature-card">
+            <h4>4. ثلاثة وكلاء</h4>
+            <p>Eligibility، Procedure، Drafter مع orchestrator.</p>
+          </div>
+          <div class="feature-card">
+            <h4>5. بوابة الموافقة</h4>
+            <p>موظف يراجع قبل الإرسال. القرارات مسجّلة.</p>
+          </div>
+          <div class="feature-card">
+            <h4>6. الحاكم المالي T3</h4>
+            <p>ميزانية لكل مستخدم، تحقق مسبق، قطع فوري.</p>
+          </div>
+        </div>
+
+        <div class="hero-footer">
+          .NET 10 · Clean Architecture · PostgreSQL + pgvector · Multi-Agent · JWT · SSE · OWASP LLM Top 10
+        </div>
+      </article>
+    </section>
+
+    <!-- TAB 2 — تسجيل الدخول -->
+    <section id="tab-login" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">تسجيل الدخول</h2>
+        <p class="card-subtitle">سجّل دخولك كمواطن للاستفسار أو كموظف لمراجعة القرارات والموافقة عليها.</p>
+        <form id="loginForm" class="form-grid">
+          <div>
+            <label for="loginUserIdInput">معرّف المستخدم (User ID)</label>
+            <input id="loginUserIdInput" required placeholder="مثال: demo-citizen أو demo-officer">
+          </div>
+          <div>
+            <label for="loginRoleSelect">الدور (Role)</label>
+            <select id="loginRoleSelect">
+              <option value="Citizen">مواطن</option>
+              <option value="Officer">موظف</option>
+            </select>
+          </div>
+          <div class="form-full actions-row">
+            <button id="loginSubmitBtn" class="btn primary" type="submit">تسجيل الدخول</button>
+          </div>
+        </form>
+
+        <div id="sessionInfoBox" class="notice hidden">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+            <div id="sessionDetails"></div>
+            <button id="logoutBtn" class="btn secondary danger" type="button">تسجيل الخروج</button>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- TAB 3 — استيعاب مستند -->
+    <section id="tab-ingest" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">استيعاب مستند رسمي</h2>
+        <p class="card-subtitle">استيعاب المستندات، تجزئتها، توليد التمثيلات المتجهية، وتخزينها في pgvector.</p>
+        <form id="ingestForm" class="form-grid-4">
+          <div>
+            <label for="ingestTitle">العنوان</label>
+            <input id="ingestTitle" required placeholder="مثال: قانون العمل والتعويضات">
+          </div>
+          <div>
+            <label for="ingestSource">المصدر</label>
+            <input id="ingestSource" required placeholder="مثال: الجريدة الرسمية">
+          </div>
+          <div>
+            <label for="ingestVersion">الإصدار</label>
+            <input id="ingestVersion" required value="1.0">
+          </div>
+          <div>
+            <label for="ingestCategory">الفئة</label>
+            <input id="ingestCategory" required placeholder="مثال: تعويضات">
+          </div>
+          <div class="form-full">
+            <label for="ingestContent">محتوى المستند</label>
+            <textarea id="ingestContent" required placeholder="الصق نص اللائحة أو المستند الرسمي هنا..."></textarea>
+          </div>
+          <div class="form-full actions-row">
+            <button id="ingestSubmitBtn" class="btn primary" type="submit">استيعاب</button>
+          </div>
+        </form>
+      </article>
+
+      <div id="ingestResultArea" class="hidden"></div>
+    </section>
+
+    <!-- TAB 4 — اسأل سؤال -->
+    <section id="tab-ask" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">اسأل سؤالاً (Agentic RAG)</h2>
+        <p class="card-subtitle">إجابة مستندة فقط على المصادر المعتمدة — رفض فوري عند غياب الدليل الموثوق.</p>
+        <form id="inquiryForm">
+          <label for="inquiryQuestion">السؤال</label>
+          <textarea id="inquiryQuestion" required placeholder="مثال: ما شروط تعويض البطالة؟"></textarea>
+          <div class="actions-row">
+            <button id="inquirySubmitBtn" class="btn primary" type="submit">اسأل</button>
+          </div>
+        </form>
+      </article>
+
+      <div id="inquiryResultArea" class="hidden"></div>
+    </section>
+
+    <!-- TAB 5 — Workflow -->
+    <section id="tab-workflow" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">تشغيل سير العمل متعدد الوكلاء (Workflow)</h2>
+        <p class="card-subtitle">تشغيل الوكلاء الثلاثة (الأهلية، الإجراءات، الصياغة) تحت إشراف المنسق وبوابة الموافقة البشرية.</p>
+        <form id="workflowForm">
+          <label for="workflowQuestionInput">السؤال أو وصف الحالة</label>
+          <textarea id="workflowQuestionInput" required placeholder="اكتب تفاصيل طلب المواطن أو الاستفسار المعقد..."></textarea>
+          <div class="actions-row">
+            <button id="runWorkflowBtn" class="btn primary" type="submit">تشغيل</button>
+            <button id="resetWorkflowBtn" class="btn secondary" type="button">إعادة</button>
+          </div>
+        </form>
+      </article>
+
+      <div id="workflowResultArea" class="hidden"></div>
+      <div id="workflowTraceArea" class="hidden"></div>
+    </section>
+
+    <!-- TAB 6 — الميزانية -->
+    <section id="tab-budget" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">الميزانية ومراقبة الاستهلاك (T3)</h2>
+        <p class="card-subtitle">الحاكم المالي T3: تحقق مسبق من الميزانية، وتتبع التوكنز، وقطع فوري عند الاستنفاذ.</p>
+        <form id="budgetForm" class="form-grid">
+          <div>
+            <label for="budgetUserInput">معرّف المستخدم (User ID)</label>
+            <input id="budgetUserInput" required placeholder="demo-citizen">
+          </div>
+          <div class="actions-row" style="margin-top:28px;">
+            <button id="budgetSubmitBtn" class="btn primary" type="submit">عرض</button>
+          </div>
+        </form>
+      </article>
+
+      <div id="budgetResultArea" class="hidden"></div>
+    </section>
+
+    <!-- TAB 7 — عن المشروع -->
+    <section id="tab-about" class="tab-panel">
+      <article class="card">
+        <h2 class="card-title">روابط سريعة</h2>
+        <div class="quick-links-grid">
+          <a id="linkSwagger" class="quick-link-card" target="_blank" rel="noopener">
+            <span>Swagger UI</span>
+            <small>/swagger</small>
+          </a>
+          <a id="linkOpenApi" class="quick-link-card" target="_blank" rel="noopener">
+            <span>OpenAPI JSON</span>
+            <small>/openapi/v1.json</small>
+          </a>
+          <a id="linkHealth" class="quick-link-card" target="_blank" rel="noopener">
+            <span>حالة الخدمة (Health)</span>
+            <small>/health</small>
+          </a>
+          <a id="linkReady" class="quick-link-card" target="_blank" rel="noopener">
+            <span>الجاهزية (Ready)</span>
+            <small>/ready</small>
+          </a>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">سجلات القرارات المعمارية (ADRs)</h2>
+        <ul class="adr-list">
+          <li><strong>ADR-001:</strong> pgvector للتخزين والبحث الدلالي فائق السرعة.</li>
+          <li><strong>ADR-002:</strong> Chunking بالنصوص المتراكبة لضمان اكتمال السياق.</li>
+          <li><strong>ADR-003:</strong> بحث هجين عبر RRF (Reciprocal Rank Fusion) لدمج الدلالي والنصي.</li>
+          <li><strong>ADR-004:</strong> تجريد مزود الـ LLM لدعم النماذج المحلية والسحابية بسلاسة.</li>
+          <li><strong>ADR-005:</strong> Orchestration بـ State Machine لإدارة تعاقب الوكلاء المتخصصين.</li>
+          <li><strong>ADR-006:</strong> الحاكم المالي T3 لحظر تجاوز الميزانية وحماية الموارد.</li>
+        </ul>
+        <div class="actions-row">
+          <a class="btn secondary" href="https://github.com/aliSami22/citizen-services-copilot" target="_blank" rel="noopener">
+            مستودع المشروع على GitHub
+          </a>
+        </div>
+      </article>
+    </section>
+
   </main>
-  <footer><div class="shell">واجهات الخدمة: <a id="swaggerLink" href="#" target="_blank" rel="noopener">Swagger</a><a id="openapiLink" href="#" target="_blank" rel="noopener">OpenAPI</a></div></footer><div id="toasts" aria-live="polite"></div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>الأمان: OWASP Web Top 10 + LLM Top 10 موثّق في <span dir="ltr">docs/SECURITY.md</span></div>
+      <div>Domain Copilot &copy; 2026</div>
+    </div>
+  </footer>
+
+  <!-- Toasts container -->
+  <div id="toastContainer" aria-live="polite"></div>
+
   <script>
-  (() => {
-    const DEFAULT_URL = 'http://localhost:5177'; let pollTimer = null; let currentRunId = null;
-    const $ = id => document.getElementById(id);
-    const escapeHtml = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-    const baseUrl = () => (localStorage.getItem('copilot.baseUrl') || DEFAULT_URL).replace(/\/+$/, '');
-    const token = () => localStorage.getItem('copilot.jwt') || '';
-    const user = () => { try { return JSON.parse(localStorage.getItem('copilot.user') || 'null'); } catch { return null; } };
-    const toast = msg => { const el=document.createElement('div'); el.className='toast'; el.textContent=msg; $('toasts').append(el); setTimeout(()=>el.remove(),3000); };
-    const setBusy = (btn, busy) => { if (!btn) return; if (busy) { btn.dataset.text=btn.textContent; btn.disabled=true; btn.textContent='جارٍ...'; } else { btn.disabled=false; btn.textContent=btn.dataset.text || btn.textContent; } };
-    const statusClass = s => ({Pending:'blue',Running:'blue',WaitingApproval:'amber',Approved:'green',Completed:'green',Rejected:'amber',Refused:'amber',Failed:'red'}[s] || 'blue');
-    const statusArabic = s => ({Pending:'قيد الانتظار',Running:'جارٍ التنفيذ',WaitingApproval:'بانتظار الموافقة',Approved:'تمت الموافقة',Completed:'مكتمل',Rejected:'مرفوض',Refused:'تم الرفض',Failed:'فشل'}[s] || s);
-    function updateLinks(){ $('swaggerLink').href=baseUrl()+'/swagger'; $('openapiLink').href=baseUrl()+'/openapi/v1.json'; }
-    function updateIdentity(){ const u=user(); $('userChip').textContent=u ? `${u.userId} (${u.role === 'Officer' ? 'موظف' : 'مواطن'})` : 'زائر'; $('loginStatus').classList.toggle('hidden',!u); $('logoutArea').classList.toggle('hidden',!u); if(u) $('loginStatus').textContent='مُسجّل: '+u.userId+' ('+(u.role === 'Officer' ? 'موظف' : 'مواطن')+')'; $('budgetUser').value = u?.userId || $('budgetUser').value || 'demo-citizen'; }
-    async function api(path, options={}) { const headers={...(options.headers||{})}; if(options.body && !headers['Content-Type']) headers['Content-Type']='application/json'; if((path.startsWith('/api/runs/') || path.startsWith('/api/users/')) && token()) headers.Authorization='Bearer '+token(); let r; try { r=await fetch(baseUrl()+path,{...options,headers}); } catch(e) { throw new Error('تعذر الاتصال بالخادم. تحقق من عنوان الخادم وإعدادات CORS.'); } let data=null, raw=''; try { data=await r.json(); } catch { try { raw=await r.text(); } catch{} } if(!r.ok){ if(r.status===401){ localStorage.removeItem('copilot.jwt'); localStorage.removeItem('copilot.user'); updateIdentity(); toast('انتهت الجلسة. سجّل دخول من جديد.'); } if(r.status===402) toast('تم استهلاك الميزانية.'); const msg=r.status===422 ? (data?.failureReason || 'تعذرت معالجة المحتوى.') : r.status===500 ? 'خطأ في الخادم.' : (data?.failureReason || data?.message || 'تعذر إتمام الطلب.'); const err=new Error(msg); err.status=r.status; err.details=JSON.stringify(data || raw || {}); throw err; } return data; }
-    function showError(target,e){ target.className='card notice error'; target.innerHTML=escapeHtml(e.message)+(e.status===500?`<details><summary>تفاصيل الخطأ</summary>${escapeHtml(e.details || '')}</details>`:''); target.classList.remove('hidden'); }
-    function decodeJwt(jwt){ try { const part=jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(atob(part).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''))); } catch { return {}; } }
-    $('baseUrl').value=baseUrl(); updateLinks(); updateIdentity();
-    $('saveBase').addEventListener('click',()=>{ const v=$('baseUrl').value.trim().replace(/\/+$/,''); if(!/^https?:\/\/.+/i.test(v)){ toast('أدخل عنوان خادم صحيحاً يبدأ بـ http أو https.'); return; } localStorage.setItem('copilot.baseUrl',v); $('baseUrl').value=v; updateLinks(); toast('تم حفظ عنوان الخادم.'); });
-    document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active')); t.classList.add('active'); $(t.dataset.tab).classList.add('active'); }));
-    $('loginForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter; setBusy(btn,true); try { const userId=$('loginUser').value.trim(), role=$('loginRole').value; const data=await api('/api/auth/login',{method:'POST',body:JSON.stringify({userId,role})}); localStorage.setItem('copilot.jwt',data.token); const claims=decodeJwt(data.token); localStorage.setItem('copilot.user',JSON.stringify({userId:claims.sub || userId,role:claims.role || role})); updateIdentity(); toast('تم تسجيل الدخول بنجاح.'); } catch(err){ toast(err.message); } finally { setBusy(btn,false); } });
-    $('logout').addEventListener('click',()=>{ localStorage.removeItem('copilot.jwt'); localStorage.removeItem('copilot.user'); updateIdentity(); toast('تم تسجيل الخروج.'); });
-    $('askForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter, out=$('askResult'); setBusy(btn,true); out.classList.add('hidden'); try { const u=user(); const data=await api('/api/inquiries',{method:'POST',body:JSON.stringify({userId:u?.userId || 'guest',question:$('askQuestion').value.trim()})}); const d=data.draft || {}; if(d.isRefusal || data.status==='Refused'){ out.innerHTML=`<div class="card refusal"><div class="result-head"><span class="badge amber">رفض</span></div><strong>تعذر تقديم إجابة مستندة</strong><p>${escapeHtml(d.refusalReason || 'لا تتوفر إجابة مستندة لهذه المسألة.')}</p></div>`; } else { const sections=[['ملخص الأهلية',d.eligibilitySummary],['خطوات الإجراء',d.procedureSteps],['المستندات المطلوبة',d.requiredDocuments],['الرسوم والمدة',d.feesAndTimeline]]; const cites=(d.citations||[]).map(c=>`<span class="citation">${escapeHtml(c.documentTitle)}${c.section?' — '+escapeHtml(c.section):''}</span>`).join('') || '<span class="muted">لا توجد مراجع معروضة.</span>'; out.innerHTML=`<div class="card"><div class="result-head"><span class="badge green">مُستند</span><span class="muted" dir="ltr">${escapeHtml(data.routedModel || '')} · $${Number(data.actualCostUsd || 0).toFixed(4)}</span></div><div class="answer-grid">${sections.map(s=>`<article class="answer-section"><h3>${s[0]}</h3><p>${escapeHtml(s[1] || '—')}</p></article>`).join('')}</div><div class="citations">${cites}</div></div>`; } out.classList.remove('hidden'); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
-    const terminal=s=>['Approved','Rejected','Refused','Completed','Failed'].includes(s);
-    function workflowHtml(run){ const steps=(run.steps||[]).map(s=>`<tr><td>${escapeHtml(s.order)}</td><td>${escapeHtml(s.role)}</td><td>${escapeHtml(statusArabic(s.status))}</td><td dir="ltr">$${Number(s.costUsd||0).toFixed(4)}</td><td>${escapeHtml(s.durationMs ?? '—')} مللي ثانية</td></tr>`).join('') || '<tr><td colspan="5" class="muted">لا توجد خطوات متاحة بعد.</td></tr>'; const u=user(); const awaiting=run.status==='WaitingApproval'; const controls=awaiting && u?.role==='Officer' ? `<div class="actions"><button class="btn primary" data-decision="approve">موافقة</button><button class="btn secondary danger" data-decision="reject">رفض</button><button class="btn secondary" data-decision="edit">تعديل وموافقة</button></div>` : awaiting ? '<div class="notice warning">بانتظار موافقة موظف مختص</div>' : ''; return `<div class="card"><div class="result-head"><span class="badge ${statusClass(run.status)}">${statusArabic(run.status)}</span><span class="muted" dir="ltr">${escapeHtml(run.runId)}</span></div>${run.errorMessage?`<div class="notice error">${escapeHtml(run.errorMessage)}</div>`:''}<div class="table-wrap"><table><thead><tr><th>الترتيب</th><th>الوكيل</th><th>الحالة</th><th>تكلفة</th><th>المدة</th></tr></thead><tbody>${steps}</tbody></table></div>${controls}</div>`; }
-    async function refreshRun(){ if(!currentRunId) return; const out=$('workflowResult'); try { const run=await api('/api/runs/'+encodeURIComponent(currentRunId)); out.innerHTML=workflowHtml(run); out.classList.remove('hidden'); if(terminal(run.status)){ clearInterval(pollTimer); pollTimer=null; } } catch(e) { clearInterval(pollTimer); pollTimer=null; showError(out,e); } }
-    $('workflowForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter, out=$('workflowResult'); setBusy(btn,true); if(pollTimer) clearInterval(pollTimer); try { const u=user(), payload={question:$('workflowQuestion').value.trim()}; if(u?.userId) payload.userId=u.userId; const data=await api('/api/workflows/citizen-response',{method:'POST',body:JSON.stringify(payload)}); currentRunId=data.runId; await refreshRun(); pollTimer=setInterval(refreshRun,3000); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
-    $('workflowResult').addEventListener('click',async e=>{ const decision=e.target.dataset.decision; if(!decision || !currentRunId) return; const btn=e.target; let path='/approve', body; if(decision==='reject'){ const reason=prompt('اكتب سبب الرفض:'); if(reason===null) return; path='/reject'; body={reason}; } if(decision==='edit'){ const editedDraftJson=prompt('أدخل مسودة الرد المعدلة بصيغة JSON:'); if(editedDraftJson===null) return; const reason=prompt('اكتب سبب التعديل:'); if(reason===null) return; path='/edit-and-approve'; body={editedDraftJson,reason}; } setBusy(btn,true); try { await api('/api/runs/'+encodeURIComponent(currentRunId)+path,{method:'POST',body:body?JSON.stringify(body):undefined}); toast(decision==='reject'?'تم إرسال الرفض.':'تم إرسال القرار.'); await refreshRun(); } catch(err){ toast(err.message); } finally { setBusy(btn,false); } });
-    $('budgetForm').addEventListener('submit',async e=>{ e.preventDefault(); const btn=e.submitter,out=$('budgetResult'); setBusy(btn,true); try { const data=await api('/api/users/'+encodeURIComponent($('budgetUser').value.trim())+'/spend'); const limit=Number(data.budgetLimitUsd||0), cost=Number(data.costUsd||0), percent=limit>0?Math.min(100,(cost/limit)*100):0; out.innerHTML=`<div class="card"><p><strong>النطاق:</strong> <span dir="ltr">${escapeHtml(data.periodStartUtc)} → ${escapeHtml(data.periodEndUtc)}</span></p><div class="metrics"><div class="metric"><span>الميزانية</span><strong>$${limit.toFixed(4)}</strong></div><div class="metric"><span>المُستهلك</span><strong>$${cost.toFixed(4)}</strong></div><div class="metric"><span>المتبقي</span><strong>$${Number(data.budgetRemainingUsd||0).toFixed(4)}</strong></div></div><div class="progress" aria-label="استهلاك الميزانية"><div style="width:${percent}%"></div></div><p class="muted">التوكنز: <span dir="ltr">${escapeHtml(data.tokensIn||0)} / ${escapeHtml(data.tokensOut||0)}</span></p></div>`; out.classList.remove('hidden'); } catch(err){ showError(out,err); } finally { setBusy(btn,false); } });
-  })();
+    (() => {
+      'use strict';
+
+      const DEFAULT_BASE_URL = 'http://localhost:5177';
+      const TERMINAL_STATUSES = ['Approved', 'Rejected', 'Refused', 'Completed', 'Failed'];
+
+      let pollTimer = null;
+      let activeRunId = null;
+
+      // Utilities
+      const $ = id => document.getElementById(id);
+
+      const escapeHtml = str => {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      };
+
+      const formatCost = n => '$' + Number(n || 0).toFixed(4);
+
+      const formatDateTime = iso => {
+        if (!iso) return '—';
+        try {
+          return new Date(iso).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+        } catch {
+          return iso;
+        }
+      };
+
+      const renderMarkdown = text => {
+        if (!text) return '—';
+        return escapeHtml(text)
+          .replace(/^[-*]\s+(.*)$/gm, '• $1')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br>');
+      };
+
+      const getBaseUrl = () => {
+        const url = localStorage.getItem('copilot.baseUrl') || DEFAULT_BASE_URL;
+        return url.replace(/\/+$/, '');
+      };
+
+      const getJwt = () => localStorage.getItem('copilot.jwt') || '';
+
+      const getStoredUser = () => {
+        try {
+          return JSON.parse(localStorage.getItem('copilot.user') || 'null');
+        } catch {
+          return null;
+        }
+      };
+
+      const showToast = msg => {
+        const container = $('toastContainer');
+        const item = document.createElement('div');
+        item.className = 'toast-item';
+        item.textContent = msg;
+        container.appendChild(item);
+        setTimeout(() => item.remove(), 3000);
+      };
+
+      const setButtonLoading = (btn, isLoading) => {
+        if (!btn) return;
+        if (isLoading) {
+          btn.dataset.origText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'جارٍ...';
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.origText) {
+            btn.textContent = btn.dataset.origText;
+          }
+        }
+      };
+
+      // JWT Decode (Safe UTF-8)
+      const parseJwtPayload = token => {
+        try {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+          return JSON.parse(jsonPayload);
+        } catch (e) {
+          return {};
+        }
+      };
+
+      // Arabic status translations and badge classes
+      const translateStatus = status => {
+        const map = {
+          Pending: 'قيد الانتظار',
+          Running: 'جارٍ التنفيذ',
+          WaitingApproval: 'بانتظار الموافقة',
+          Approved: 'تمت الموافقة',
+          Completed: 'مكتمل',
+          Rejected: 'مرفوض',
+          Refused: 'تم الرفض',
+          Failed: 'فشل',
+          Succeeded: 'ناجح'
+        };
+        return map[status] || status;
+      };
+
+      const getStatusColor = status => {
+        switch (status) {
+          case 'Pending':
+          case 'Running':
+            return 'blue';
+          case 'WaitingApproval':
+          case 'Rejected':
+          case 'Refused':
+            return 'amber';
+          case 'Approved':
+          case 'Completed':
+          case 'Succeeded':
+            return 'green';
+          case 'Failed':
+            return 'red';
+          default:
+            return 'blue';
+        }
+      };
+
+      // Update Quick Links
+      const updateQuickLinks = () => {
+        const b = getBaseUrl();
+        $('linkSwagger').href = b + '/swagger';
+        $('linkOpenApi').href = b + '/openapi/v1.json';
+        $('linkHealth').href = b + '/health';
+        $('linkReady').href = b + '/ready';
+      };
+
+      // Update Identity UI
+      const updateIdentityUi = () => {
+        const user = getStoredUser();
+        const chip = $('currentUserChip');
+        const sessionBox = $('sessionInfoBox');
+        const sessionDetails = $('sessionDetails');
+
+        if (user && user.userId) {
+          const roleArabic = user.role === 'Officer' ? 'موظف' : 'مواطن';
+          chip.textContent = `${user.userId} (${roleArabic})`;
+          sessionBox.classList.remove('hidden');
+          sessionDetails.innerHTML = `
+            <div>المستخدم الحالي: <strong>${escapeHtml(user.userId)}</strong></div>
+            <div>الدور: <span class="badge ${user.role === 'Officer' ? 'amber' : 'blue'}">${escapeHtml(roleArabic)}</span></div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">ينتهي في: ${escapeHtml(user.expiresAtUtc || 'غير محدد')}</div>
+          `;
+        } else {
+          chip.textContent = 'زائر';
+          sessionBox.classList.add('hidden');
+          sessionDetails.innerHTML = '';
+        }
+
+        if ($('budgetUserInput') && !$('budgetUserInput').value) {
+          $('budgetUserInput').value = user?.userId || 'demo-citizen';
+        }
+      };
+
+      // API Wrapper
+      const callApi = async (path, options = {}) => {
+        const headers = { ...(options.headers || {}) };
+        if (options.body && !headers['Content-Type']) {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        const token = getJwt();
+        if (token) {
+          headers['Authorization'] = 'Bearer ' + token;
+        }
+
+        const url = getBaseUrl() + path;
+        let response;
+        try {
+          response = await fetch(url, { ...options, headers });
+        } catch (netErr) {
+          throw new Error('تعذر الاتصال بالخادم. تحقق من تشغيل الـ API وعنوان Base URL.');
+        }
+
+        let data = null;
+        let rawText = '';
+        try {
+          data = await response.json();
+        } catch {
+          try { rawText = await response.text(); } catch {}
+        }
+
+        if (!response.ok) {
+          const s = response.status;
+          if (s === 401) {
+            localStorage.removeItem('copilot.jwt');
+            localStorage.removeItem('copilot.user');
+            updateIdentityUi();
+            showToast('انتهت الجلسة. سجّل دخول من جديد.');
+          } else if (s === 402) {
+            showToast('تم استهلاك الميزانية.');
+          } else if (s === 403) {
+            showToast('لا تملك صلاحية لهذا الإجراء.');
+          } else if (s === 404 && !options.silent404) {
+            showToast('العنصر غير موجود.');
+          } else if (s === 409) {
+            showToast('القرار مسجّل مسبقًا.');
+          }
+
+          let errMsg = 'تعذر إتمام الطلب.';
+          if (s === 422) {
+            errMsg = data?.failureReason || 'تعذر استيعاب المستند.';
+          } else if (s === 500) {
+            errMsg = 'خطأ في الخادم.';
+          } else if (data?.failureReason) {
+            errMsg = data.failureReason;
+          } else if (data?.message) {
+            errMsg = data.message;
+          } else if (data?.title) {
+            errMsg = data.title;
+          }
+
+          const err = new Error(errMsg);
+          err.status = s;
+          err.details = data ? JSON.stringify(data, null, 2) : rawText;
+          throw err;
+        }
+
+        return data;
+      };
+
+      const renderErrorCallout = (targetEl, err) => {
+        targetEl.className = 'card notice error';
+        let html = `<strong>${escapeHtml(err.message)}</strong>`;
+        if (err.status === 500 && err.details) {
+          html += `<details style="margin-top:8px; direction:ltr; text-align:left; font-size:12px;"><summary>تفاصيل الخطأ (500)</summary><pre style="white-space:pre-wrap; margin-top:6px;">${escapeHtml(err.details)}</pre></details>`;
+        }
+        targetEl.innerHTML = html;
+        targetEl.classList.remove('hidden');
+      };
+
+      // Tab Switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          const targetId = btn.dataset.tab;
+          if ($(targetId)) {
+            $(targetId).classList.add('active');
+          }
+        });
+      });
+
+      // Base URL management
+      $('baseUrlInput').value = getBaseUrl();
+      updateQuickLinks();
+      updateIdentityUi();
+
+      $('saveBaseUrlBtn').addEventListener('click', () => {
+        const val = $('baseUrlInput').value.trim().replace(/\/+$/, '');
+        if (!/^https?:\/\/.+/i.test(val)) {
+          showToast('يرجى إدخال عنوان صحيح يبدأ بـ http:// أو https://');
+          return;
+        }
+        localStorage.setItem('copilot.baseUrl', val);
+        $('baseUrlInput').value = val;
+        updateQuickLinks();
+        showToast('تم حفظ عنوان الخادم.');
+      });
+
+      // TAB 2: Login / Logout
+      $('loginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitBtn = $('loginSubmitBtn');
+        setButtonLoading(submitBtn, true);
+
+        try {
+          const userId = $('loginUserIdInput').value.trim();
+          const role = $('loginRoleSelect').value;
+
+          const res = await callApi('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ userId, role })
+          });
+
+          const claims = parseJwtPayload(res.token);
+          const resolvedRole = claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || claims.role || role;
+          const resolvedSub = claims.sub || claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || userId;
+
+          localStorage.setItem('copilot.jwt', res.token);
+          localStorage.setItem('copilot.user', JSON.stringify({
+            userId: resolvedSub,
+            role: resolvedRole,
+            expiresAtUtc: res.expiresAtUtc || (claims.exp ? new Date(claims.exp * 1000).toLocaleString('ar-EG') : 'غير محدد')
+          }));
+
+          updateIdentityUi();
+          showToast('تم تسجيل الدخول بنجاح.');
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          setButtonLoading(submitBtn, false);
+        }
+      });
+
+      $('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('copilot.jwt');
+        localStorage.removeItem('copilot.user');
+        updateIdentityUi();
+        showToast('تم تسجيل الخروج.');
+      });
+
+      // TAB 3: Ingestion
+      $('ingestForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitBtn = $('ingestSubmitBtn');
+        const resultArea = $('ingestResultArea');
+        setButtonLoading(submitBtn, true);
+
+        try {
+          const payload = {
+            title: $('ingestTitle').value.trim(),
+            source: $('ingestSource').value.trim(),
+            version: $('ingestVersion').value.trim(),
+            category: $('ingestCategory').value.trim(),
+            content: $('ingestContent').value.trim()
+          };
+
+          const res = await callApi('/api/documents/text', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+
+          const hashPrefix = (res.contentHash || '—').slice(0, 16);
+          resultArea.className = 'card';
+          resultArea.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+              <span class="badge green">${escapeHtml(res.status || 'تم الاستيعاب')}</span>
+              ${res.isDuplicate ? '<span class="badge amber">مستند مكرر (isDuplicate: true)</span>' : '<span class="badge blue">مستند جديد</span>'}
+            </div>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span>معرّف المستند</span>
+                <strong>${escapeHtml(res.documentId || '—')}</strong>
+              </div>
+              <div class="metric-card">
+                <span>عدد الأجزاء (Chunks)</span>
+                <strong>${escapeHtml(res.chunkCount ?? '—')}</strong>
+              </div>
+              <div class="metric-card">
+                <span>بصمة المحتوى (Hash)</span>
+                <strong>${escapeHtml(hashPrefix)}...</strong>
+              </div>
+            </div>
+          `;
+          resultArea.classList.remove('hidden');
+          showToast('تم استيعاب المستند وتوليد الـ Chunks بنجاح.');
+        } catch (err) {
+          if (err.status === 422) {
+            resultArea.className = 'card notice error';
+            resultArea.innerHTML = `<strong>فشل الاستيعاب (422):</strong> ${escapeHtml(err.message)}`;
+            resultArea.classList.remove('hidden');
+          } else {
+            renderErrorCallout(resultArea, err);
+          }
+        } finally {
+          setButtonLoading(submitBtn, false);
+        }
+      });
+
+      // TAB 4: Ask Inquiry
+      $('inquiryForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitBtn = $('inquirySubmitBtn');
+        const resultArea = $('inquiryResultArea');
+        setButtonLoading(submitBtn, true);
+
+        try {
+          const currentUser = getStoredUser();
+          const userId = currentUser?.userId || 'demo-citizen';
+          const question = $('inquiryQuestion').value.trim();
+
+          const res = await callApi('/api/inquiries', {
+            method: 'POST',
+            body: JSON.stringify({ userId, question })
+          });
+
+          const draft = res.draft || {};
+          const isRefusal = draft.isRefusal || res.status === 'Refused';
+
+          if (isRefusal) {
+            resultArea.className = 'card notice refusal';
+            resultArea.innerHTML = `
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span class="badge amber">رفض</span>
+              </div>
+              <h3 style="font-size:15px; margin-bottom:6px; color:#fde68a;">تعذر تقديم إجابة مستندة من المصادر</h3>
+              <p style="font-size:13px; line-height:1.6;">${escapeHtml(draft.refusalReason || 'لا يوجد مصدر موثوق في قاعدة المعرفة يدعم الإجابة عن هذا السؤال.')}</p>
+            `;
+          } else {
+            const blocks = [
+              { title: 'ملخص الأهلية', content: draft.eligibilitySummary },
+              { title: 'خطوات الإجراء', content: draft.procedureSteps },
+              { title: 'المستندات المطلوبة', content: draft.requiredDocuments },
+              { title: 'الرسوم والمدة الزمنية', content: draft.feesAndTimeline }
+            ];
+
+            const citations = (draft.citations || []).map(c => {
+              const sec = c.section ? ` — ${escapeHtml(c.section)}` : '';
+              const pg = (c.pageNumber || c.page) ? ` · ص ${escapeHtml(c.pageNumber || c.page)}` : '';
+              return `<span class="citation-chip">${escapeHtml(c.documentTitle)}${sec}${pg}</span>`;
+            }).join('') || '<span style="color:var(--muted); font-size:12px;">لا توجد استشهادات مرفقة.</span>';
+
+            resultArea.className = 'card';
+            resultArea.innerHTML = `
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+                <span class="badge green">مُستند</span>
+                <span style="color:var(--muted); font-size:12px; direction:ltr;">
+                  ${escapeHtml(res.routedModel || '')} · actual: ${formatCost(res.actualCostUsd)} · est: ${formatCost(res.estimatedCostUsd)}
+                </span>
+              </div>
+              <div class="answer-blocks-grid">
+                ${blocks.map(b => `
+                  <div class="answer-block">
+                    <h3>${escapeHtml(b.title)}</h3>
+                    <div class="content">${renderMarkdown(b.content)}</div>
+                  </div>
+                `).join('')}
+              </div>
+              <div>
+                <strong style="display:block; font-size:13px; margin-bottom:8px;">الاستشهادات والمصادر:</strong>
+                <div class="citations-wrap">${citations}</div>
+              </div>
+            `;
+          }
+          resultArea.classList.remove('hidden');
+        } catch (err) {
+          renderErrorCallout(resultArea, err);
+        } finally {
+          setButtonLoading(submitBtn, false);
+        }
+      });
+
+      // TAB 5: Workflow
+      const renderRunView = run => {
+        const steps = run.steps || [];
+        const stepsRows = steps.map(s => {
+          const rowCls = s.status === 'Failed' ? 'tr-failed' : s.status === 'Running' ? 'tr-running' : '';
+          return `
+            <tr class="${rowCls}">
+              <td>${escapeHtml(s.order)}</td>
+              <td><strong>${escapeHtml(s.role)}</strong></td>
+              <td>${escapeHtml(s.toolName || '—')}</td>
+              <td><span class="badge ${getStatusColor(s.status)}">${escapeHtml(translateStatus(s.status))}</span></td>
+              <td dir="ltr" style="text-align:right;">${escapeHtml(s.tokensIn || 0)} / ${escapeHtml(s.tokensOut || 0)}</td>
+              <td dir="ltr" style="text-align:right;">${formatCost(s.costUsd)}</td>
+              <td>${s.durationMs != null ? escapeHtml(s.durationMs) + ' ms' : '—'}</td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:16px;">لا توجد خطوات مسجلة بعد.</td></tr>';
+
+        const currentUser = getStoredUser();
+        const isOfficer = currentUser?.role === 'Officer';
+
+        let approvalSection = '';
+        if (run.status === 'WaitingApproval') {
+          if (isOfficer) {
+            approvalSection = `
+              <div style="border-top:1px solid var(--border); margin-top:20px; padding-top:16px;">
+                <h3 style="font-size:15px; margin-bottom:10px; color:var(--warning);">بوابة الموافقة البشرية (Officer Approval Gate)</h3>
+                <div class="actions-row">
+                  <button class="btn primary" data-action="approve">موافقة (Approve)</button>
+                  <button class="btn secondary danger" data-action="reject">رفض (Reject)</button>
+                  <button class="btn secondary" data-action="edit">تعديل وموافقة (Edit & Approve)</button>
+                </div>
+              </div>
+            `;
+          } else {
+            approvalSection = `
+              <div class="notice warning" style="margin-top:20px;">
+                <strong>بانتظار موافقة موظف مختص</strong> — يتطلب هذا القرار الحساس مراجعة وتدقيقاً من موظف حكومي معتمد قبل الاعتماد النهائي.
+              </div>
+            `;
+          }
+        }
+
+        return `
+          <article class="card">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="badge ${getStatusColor(run.status)}">${escapeHtml(translateStatus(run.status))}</span>
+                <span style="color:var(--muted); font-size:12px; font-family:monospace; direction:ltr;">${escapeHtml(run.runId)}</span>
+              </div>
+            </div>
+
+            ${run.errorMessage ? `<div class="notice error" style="margin-bottom:14px;"><strong>خطأ:</strong> ${escapeHtml(run.errorMessage)}</div>` : ''}
+
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span>التكلفة الكلية</span>
+                <strong>${formatCost(run.totalCostUsd)}</strong>
+              </div>
+              <div class="metric-card">
+                <span>التوكنز (دخول / خروج)</span>
+                <strong>${escapeHtml(run.totalTokensIn || 0)} / ${escapeHtml(run.totalTokensOut || 0)}</strong>
+              </div>
+              <div class="metric-card">
+                <span>وقت البدء</span>
+                <strong>${escapeHtml(formatDateTime(run.startedAtUtc))}</strong>
+              </div>
+              <div class="metric-card">
+                <span>وقت الإكمال</span>
+                <strong>${escapeHtml(formatDateTime(run.completedAtUtc))}</strong>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الترتيب</th>
+                    <th>الوكيل</th>
+                    <th>الأداة</th>
+                    <th>الحالة</th>
+                    <th>Tokens (In/Out)</th>
+                    <th>تكلفة</th>
+                    <th>مدة</th>
+                  </tr>
+                </thead>
+                <tbody>${stepsRows}</tbody>
+              </table>
+            </div>
+
+            ${approvalSection}
+
+            <div class="actions-row" style="margin-top:16px;">
+              <button class="btn secondary" data-action="trace">عرض التتبع (Trace)</button>
+            </div>
+          </article>
+        `;
+      };
+
+      const pollRun = async () => {
+        if (!activeRunId) return;
+        const resultArea = $('workflowResultArea');
+        try {
+          const run = await callApi('/api/runs/' + encodeURIComponent(activeRunId), { silent404: true });
+          resultArea.innerHTML = renderRunView(run);
+          resultArea.classList.remove('hidden');
+
+          if (TERMINAL_STATUSES.includes(run.status)) {
+            if (pollTimer) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+            }
+          }
+        } catch (err) {
+          if (err.status === 404) return;
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          renderErrorCallout(resultArea, err);
+        }
+      };
+
+      $('workflowForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitBtn = $('runWorkflowBtn');
+        const resultArea = $('workflowResultArea');
+        const traceArea = $('workflowTraceArea');
+        setButtonLoading(submitBtn, true);
+
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        traceArea.classList.add('hidden');
+
+        try {
+          const currentUser = getStoredUser();
+          const question = $('workflowQuestionInput').value.trim();
+          const body = { question };
+          if (currentUser?.userId) {
+            body.userId = currentUser.userId;
+          }
+
+          const res = await callApi('/api/workflows/citizen-response', {
+            method: 'POST',
+            body: JSON.stringify(body)
+          });
+
+          activeRunId = res.runId;
+          showToast(`تم إطلاق سير العمل (Run: ${activeRunId.slice(0, 8)}...)`);
+
+          await pollRun();
+          pollTimer = setInterval(pollRun, 3000);
+        } catch (err) {
+          renderErrorCallout(resultArea, err);
+        } finally {
+          setButtonLoading(submitBtn, false);
+        }
+      });
+
+      $('resetWorkflowBtn').addEventListener('click', () => {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        activeRunId = null;
+        $('workflowResultArea').classList.add('hidden');
+        $('workflowResultArea').innerHTML = '';
+        $('workflowTraceArea').classList.add('hidden');
+        $('workflowTraceArea').innerHTML = '';
+        $('workflowForm').reset();
+        showToast('تمت إعادة ضبط سير العمل.');
+      });
+
+      // Actions inside workflow result (approval, rejection, edit, trace)
+      $('workflowResultArea').addEventListener('click', async e => {
+        const action = e.target.dataset.action;
+        if (!action || !activeRunId) return;
+        const btn = e.target;
+
+        if (action === 'trace') {
+          setButtonLoading(btn, true);
+          try {
+            const traceData = await callApi('/api/runs/' + encodeURIComponent(activeRunId) + '/trace');
+            const traceArea = $('workflowTraceArea');
+            traceArea.className = 'card';
+            traceArea.innerHTML = `
+              <h2 class="card-title">تتبع سير العمل (Trace)</h2>
+              <div style="margin-bottom:12px; font-size:13px;">
+                معرّف الارتباط (Correlation ID): <strong dir="ltr" style="font-family:monospace; color:var(--accent);">${escapeHtml(traceData.correlationId || '—')}</strong>
+              </div>
+              <pre style="background:var(--bg-soft); border:1px solid var(--border); border-radius:8px; padding:12px; font-size:12px; max-height:400px; overflow:auto; direction:ltr; text-align:left;">${escapeHtml(JSON.stringify(traceData.steps || [], null, 2))}</pre>
+            `;
+            traceArea.classList.remove('hidden');
+          } catch (err) {
+            renderErrorCallout($('workflowTraceArea'), err);
+          } finally {
+            setButtonLoading(btn, false);
+          }
+          return;
+        }
+
+        let endpointPath = '/approve';
+        let reqBody;
+
+        if (action === 'reject') {
+          const reason = prompt('يرجى كتابة سبب الرفض:');
+          if (reason === null) return;
+          endpointPath = '/reject';
+          reqBody = { reason };
+        } else if (action === 'edit') {
+          const editedDraftJson = prompt('أدخل نص المسودة المعدلة بصيغة JSON:');
+          if (editedDraftJson === null) return;
+          const reason = prompt('يرجى كتابة سبب التعديل:');
+          if (reason === null) return;
+          endpointPath = '/edit-and-approve';
+          reqBody = { editedDraftJson, reason };
+        }
+
+        setButtonLoading(btn, true);
+        try {
+          await callApi(`/api/runs/${encodeURIComponent(activeRunId)}${endpointPath}`, {
+            method: 'POST',
+            body: reqBody ? JSON.stringify(reqBody) : undefined
+          });
+
+          showToast(action === 'reject' ? 'تم تسجيل رفض الطلب.' : 'تم تسجيل الموافقة بنجاح.');
+          await pollRun();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          setButtonLoading(btn, false);
+        }
+      });
+
+      // TAB 6: Budget
+      $('budgetForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitBtn = $('budgetSubmitBtn');
+        const resultArea = $('budgetResultArea');
+        setButtonLoading(submitBtn, true);
+
+        try {
+          const userId = $('budgetUserInput').value.trim() || 'demo-citizen';
+          const res = await callApi('/api/users/' + encodeURIComponent(userId) + '/spend');
+
+          const limit = Number(res.budgetLimitUsd || 0);
+          const cost = Number(res.costUsd || 0);
+          const remaining = Number(res.budgetRemainingUsd || 0);
+          const percent = limit > 0 ? Math.min(100, Math.max(0, (cost / limit) * 100)) : 0;
+          const isWarning = limit > 0 && remaining < (limit * 0.2);
+
+          resultArea.className = 'card';
+          resultArea.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+              <h3 style="font-size:16px; font-weight:700;">سجل استهلاك المستخدم: <span dir="ltr">${escapeHtml(res.userId)}</span></h3>
+              <span style="font-size:12px; color:var(--muted); direction:ltr;">
+                الفترة: ${escapeHtml(formatDateTime(res.periodStartUtc))} &rarr; ${escapeHtml(formatDateTime(res.periodEndUtc))}
+              </span>
+            </div>
+
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span>سقف الميزانية</span>
+                <strong>${formatCost(limit)}</strong>
+              </div>
+              <div class="metric-card">
+                <span>المبلغ المستهلك</span>
+                <strong>${formatCost(cost)}</strong>
+              </div>
+              <div class="metric-card">
+                <span>المتبقي</span>
+                <strong style="color:${isWarning ? 'var(--warning)' : 'var(--success)'};">${formatCost(remaining)}</strong>
+              </div>
+            </div>
+
+            <div style="margin-top:16px;">
+              <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--muted);">
+                <span>نسبة الاستهلاك</span>
+                <span dir="ltr">${percent.toFixed(1)}%</span>
+              </div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill ${isWarning ? 'warn' : ''}" style="width: ${percent}%;"></div>
+              </div>
+              ${isWarning ? '<p style="color:var(--warning); font-size:12px; margin-top:4px;">تنبيه: الرصيد المتبقي أقل من 20% من الميزانية المحددة.</p>' : ''}
+            </div>
+
+            <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border); font-size:13px; color:var(--muted);">
+              إجمالي التوكنز: <strong dir="ltr" style="color:var(--fg);">${escapeHtml(res.tokensIn || 0)}</strong> In / <strong dir="ltr" style="color:var(--fg);">${escapeHtml(res.tokensOut || 0)}</strong> Out
+            </div>
+          `;
+          resultArea.classList.remove('hidden');
+        } catch (err) {
+          renderErrorCallout(resultArea, err);
+        } finally {
+          setButtonLoading(submitBtn, false);
+        }
+      });
+
+    })();
   </script>
 </body>
 </html>
