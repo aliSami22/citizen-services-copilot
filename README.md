@@ -112,7 +112,7 @@ Full workflow: **login → ingest → ask → refuse → run → approve → tra
 
 ## Teaching Video
 
-[Watch the 10-minute teaching sample](TO_BE_FILLED)
+[Watch the 10-minute teaching sample](https://youtu.be/3eQNsl-gPT0)
 
 ## Teaching Pack
 
